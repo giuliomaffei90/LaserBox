@@ -154,7 +154,8 @@ struct GeneratorCard: View {
                     if let model {
                         Group {
                             if let assembly = model.galleryAssemblies[generator.name] {
-                                AssemblyView(assembly: assembly, key: generator.name, interactive: false, yaw: yaw, pitch: pitch)
+                                AssemblyView(assembly: assembly, key: generator.name, hidesLids: true, interactive: false,
+                                             yaw: yaw + (assembly.turn ?? 0) * .pi / 180, pitch: pitch)
                             } else {
                                 ProgressView()
                             }

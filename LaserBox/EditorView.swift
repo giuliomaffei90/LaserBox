@@ -116,7 +116,7 @@ struct EditorView: View {
                 }
                 .toggleStyle(.button)
                 .disabled(!(model.assembly?.pieces.contains { $0.decoration != nil } ?? false))
-                .help("Show or hide the decorations: what goes in the box, which isn’t cut")
+                .help("Show or hide the decorations: what goes in the box, removable lids and panels")
                 Picker("Material", selection: $materialID) {
                     ForEach(SheetMaterial.Kind.allCases) { kind in
                         Section(kind.title) {
@@ -355,6 +355,7 @@ struct AssemblyView: NSViewRepresentable {
     let key: String          // changes when the geometry changes
     var material = SheetMaterial.standard
     var decorations = true
+    var hidesLids = false  // the gallery shows boxes without their lifted lids
     var interactive = true
     var yaw: CGFloat = 0
     var pitch: CGFloat = 0
@@ -372,12 +373,12 @@ struct AssemblyView: NSViewRepresentable {
 
     func updateNSView(_ view: SCNView, context: Context) {
         let c = context.coordinator
-        let key = "\(key)|\(material.id)|\(decorations)"
+        let key = "\(key)|\(material.id)|\(decorations)|\(hidesLids)"
         if c.key != key {
             c.key = key
             c.spin.childNodes.forEach { $0.removeFromParentNode() }
             let box = SCNNode()
-            for piece in assembly.pieces where decorations || piece.decoration == nil {
+            for piece in assembly.pieces where piece.decoration == nil || decorations && !(hidesLids && piece.decoration == "lid") {
                 box.addChildNode(Self.node(for: piece, material: material))
             }
             let (minV, maxV) = box.boundingBox
@@ -473,9 +474,9 @@ struct AssemblyView: NSViewRepresentable {
         path.flatness = 0.2
         let shape = SCNShape(path: path, extrusionDepth: CGFloat(piece.t))
         let node = SCNNode(geometry: shape)
-        if let kind = piece.decoration {
-            shape.materials = [decorationMaterials[kind] ?? material.scn]
-        } else {
+        if let kind = piece.decoration, let look = decorationMaterials[kind] {
+            shape.materials = [look]
+        } else {  // the box's own parts, and decorations cut from the sheet (a lid)
             shape.materials = [material.scn]
             if material.kind == .clearAcrylic {  // SceneKit ignores the material's transparency with these shaders
                 node.opacity = 0.45

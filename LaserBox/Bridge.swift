@@ -46,6 +46,7 @@ struct Piece: Decodable {
 
 struct Assembly: Decodable {
     let pieces: [Piece]
+    var turn: Double?  // degrees about the vertical the gallery shows it turned by
 }
 
 struct BridgeError: LocalizedError {

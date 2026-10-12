@@ -451,12 +451,12 @@
         }
       }
     },
-    "Show or hide the decorations: what goes in the box, which isn’t cut": {
+    "Show or hide the decorations: what goes in the box, removable lids and panels": {
       "localizations": {
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mostra o nascondi le decorazioni: ciò che va nella scatola e non viene tagliato"
+            "value": "Mostra o nascondi le decorazioni: ciò che va nella scatola, i coperchi e i pannelli rimovibili"
           }
         }
       }
