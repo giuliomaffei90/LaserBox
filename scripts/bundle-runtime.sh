@@ -11,6 +11,8 @@ src=$(mktemp -d)/boxes
 rm -rf Runtime && mkdir -p Runtime/samples
 git init -q "$src" && git -C "$src" fetch -q --depth 1 https://github.com/florianfesti/boxes.git "$BOXES_REF"
 git -C "$src" checkout -q FETCH_HEAD
+# Upstream typo: NotesHolder with opening 0 never sets front_edge.
+sed -i '' 's/font_edge = back_edge/front_edge = back_edge/' "$src/boxes/generators/notesholder.py"
 
 uv python install "$PY_VERSION"
 cp -R "$(dirname "$(dirname "$(uv python find --managed-python "$PY_VERSION")")")" Runtime/python

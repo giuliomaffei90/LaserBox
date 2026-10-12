@@ -24,6 +24,8 @@ struct EditorView: View {
     @State private var exportFile: CutFile?
     @State private var exportType: UTType = .svg
     @State private var exportError: String?
+    @State private var materialID = SheetMaterial.standard.id  // every box opens in MDF
+    @AppStorage("showsDecorations") private var showsDecorations = true
 
     var body: some View {
         preview
@@ -34,7 +36,10 @@ struct EditorView: View {
             .navigationTitle(generator.title)
             .navigationSubtitle(generator.doc)
             .toolbar { toolbar }
-            .task(id: generator.name) { model.selection = generator.name }
+            .task(id: generator.name) {
+                model.selection = generator.name
+                materialID = SheetMaterial.standard.id
+            }
             .focusedSceneValue(\.boxActions, boxActions)
             .fileExporter(
                 isPresented: Binding { exportFile != nil } set: { if !$0 { exportFile = nil } },
@@ -63,7 +68,8 @@ struct EditorView: View {
         if model.showsAssembly, ready {
             Group {
                 if let assembly = model.assembly {
-                    AssemblyView(assembly: assembly, key: model.assemblyKey)
+                    AssemblyView(assembly: assembly, key: model.assemblyKey,
+                                 material: SheetMaterial.named(materialID), decorations: showsDecorations)
                 } else if let error = model.assemblyError {
                     ContentUnavailableView("No 3D View for This Box", systemImage: "cube.transparent", description: Text(error))
                 } else {
@@ -97,13 +103,35 @@ struct EditorView: View {
     }
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
-        ToolbarItem(placement: .principal) {
+        ToolbarItemGroup(placement: .principal) {
             Picker("View", selection: Binding { model.showsAssembly } set: { model.showsAssembly = $0 }) {
                 Text("Cut Sheet").tag(false)
                 Text("Assembled").tag(true)
             }
             .pickerStyle(.segmented)
             .help("Show the cut sheet or the assembled box")
+            if model.showsAssembly {
+                Toggle(isOn: $showsDecorations) {
+                    Label("Decorations", systemImage: "sparkles")
+                }
+                .toggleStyle(.button)
+                .disabled(!(model.assembly?.pieces.contains { $0.decoration != nil } ?? false))
+                .help("Show or hide the decorations: what goes in the box, which isn’t cut")
+                Picker("Material", selection: $materialID) {
+                    ForEach(SheetMaterial.Kind.allCases) { kind in
+                        Section(kind.title) {
+                            ForEach(SheetMaterial.all.filter { $0.kind == kind }) { material in
+                                Label { Text(material.name) } icon: { Image(nsImage: material.swatch) }
+                                    .tag(material.id)
+                            }
+                        }
+                    }
+                }
+                .pickerStyle(.menu)
+                .labelStyle(.titleAndIcon)
+                .fixedSize()
+                .help("Choose the material for the 3D view")
+            }
         }
         if model.isRendering {
             ToolbarItem {
@@ -320,11 +348,13 @@ struct SVGPreview: NSViewRepresentable {
     }
 }
 
-/// The assembled box: every piece extruded and placed, plywood with laser-darkened cut edges.
+/// The assembled box: every piece extruded and placed in the chosen material, plus its decorations.
 /// `interactive` gives the full orbit/zoom camera; otherwise `yaw`/`pitch` turn the box.
 struct AssemblyView: NSViewRepresentable {
     let assembly: Assembly
     let key: String          // changes when the geometry changes
+    var material = SheetMaterial.standard
+    var decorations = true
     var interactive = true
     var yaw: CGFloat = 0
     var pitch: CGFloat = 0
@@ -342,11 +372,14 @@ struct AssemblyView: NSViewRepresentable {
 
     func updateNSView(_ view: SCNView, context: Context) {
         let c = context.coordinator
+        let key = "\(key)|\(material.id)|\(decorations)"
         if c.key != key {
             c.key = key
             c.spin.childNodes.forEach { $0.removeFromParentNode() }
             let box = SCNNode()
-            for piece in assembly.pieces { box.addChildNode(Self.node(for: piece)) }
+            for piece in assembly.pieces where decorations || piece.decoration == nil {
+                box.addChildNode(Self.node(for: piece, material: material))
+            }
             let (minV, maxV) = box.boundingBox
             box.position = SCNVector3(-(minV.x + maxV.x) / 2, -(minV.y + maxV.y) / 2, -(minV.z + maxV.z) / 2)
             let tilt = SCNNode()           // boxes.py is z-up, SceneKit y-up
@@ -423,26 +456,13 @@ struct AssemblyView: NSViewRepresentable {
         return scene
     }
 
-    /// Plywood whose cut edges (the extrusion's side faces, normal ⟂ z) are laser-browned.
-    private static let wood: SCNMaterial = {
-        let m = SCNMaterial()
-        m.diffuse.contents = NSColor(red: 0.91, green: 0.78, blue: 0.55, alpha: 1)
-        m.lightingModel = .physicallyBased
-        m.roughness.contents = 0.8
-        m.metalness.contents = 0.0
-        m.isDoubleSided = true
-        m.shaderModifiers = [
-            .geometry: "_geometry.texcoords[0] = float2(abs(_geometry.normal.z), 0.0);",
-            .surface: """
-                float face = smoothstep(0.3, 0.7, _surface.diffuseTexcoord.x);
-                _surface.diffuse.rgb = mix(float3(0.42, 0.29, 0.17), _surface.diffuse.rgb, face);
-                """,
-        ]
-        return m
-    }()
+    /// Decoration kinds (assembly.py) and their look.
+    private static let decorationMaterials = [
+        "paper": SheetMaterial.surface(NSColor(red: 0.99, green: 0.95, blue: 0.62, alpha: 1), roughness: 0.95, edge: "float3(0.85)"),
+    ]
 
     /// SCNShape extrudes a flat path along z, centred; the path's even-odd rule turns inner rings into holes.
-    private static func node(for piece: Piece) -> SCNNode {
+    private static func node(for piece: Piece, material: SheetMaterial) -> SCNNode {
         let path = NSBezierPath()
         path.windingRule = .evenOdd
         for ring in piece.rings where ring.count >= 3 {
@@ -452,8 +472,16 @@ struct AssemblyView: NSViewRepresentable {
         }
         path.flatness = 0.2
         let shape = SCNShape(path: path, extrusionDepth: CGFloat(piece.t))
-        shape.materials = [wood]
         let node = SCNNode(geometry: shape)
+        if let kind = piece.decoration {
+            shape.materials = [decorationMaterials[kind] ?? material.scn]
+        } else {
+            shape.materials = [material.scn]
+            if material.kind == .clearAcrylic {  // SceneKit ignores the material's transparency with these shaders
+                node.opacity = 0.45
+                node.castsShadow = false
+            }
+        }
         let u = SCNVector3(piece.u[0], piece.u[1], piece.u[2])
         let v = SCNVector3(piece.v[0], piece.v[1], piece.v[2])
         let s = CGFloat(piece.side)
@@ -466,5 +494,96 @@ struct AssemblyView: NSViewRepresentable {
             m31: n.x, m32: n.y, m33: n.z, m34: 0,
             m41: CGFloat(o[0]) + n.x * half, m42: CGFloat(o[1]) + n.y * half, m43: CGFloat(o[2]) + n.z * half, m44: 1)
         return node
+    }
+}
+
+/// What the box is cut from, as the 3D view shows it.
+struct SheetMaterial: Identifiable {
+    enum Kind: CaseIterable, Identifiable {
+        case wood, acrylic, clearAcrylic
+        var id: Self { self }
+        var title: LocalizedStringKey {
+            switch self {
+            case .wood: "Wood"
+            case .acrylic: "Acrylic"
+            case .clearAcrylic: "Transparent Acrylic"
+            }
+        }
+    }
+
+    let id: String
+    let name: LocalizedStringKey
+    let kind: Kind
+    let color: NSColor
+
+    private init(_ id: String, _ name: LocalizedStringKey, _ kind: Kind, _ r: Double, _ g: Double, _ b: Double) {
+        self.id = id; self.name = name; self.kind = kind
+        color = NSColor(red: r, green: g, blue: b, alpha: 1)
+    }
+
+    static let all: [SheetMaterial] = [
+        .init("birch", "Birch Plywood", .wood, 0.91, 0.78, 0.55),
+        .init("poplar", "Poplar Plywood", .wood, 0.93, 0.86, 0.68),
+        .init("beech", "Beech", .wood, 0.86, 0.66, 0.46),
+        .init("cherry", "Cherry", .wood, 0.72, 0.43, 0.27),
+        .init("walnut", "Walnut", .wood, 0.46, 0.31, 0.21),
+        .init("mdf", "MDF", .wood, 0.66, 0.50, 0.34),
+        .init("white", "White", .acrylic, 0.95, 0.95, 0.94),
+        .init("black", "Black", .acrylic, 0.08, 0.08, 0.09),
+        .init("red", "Red", .acrylic, 0.80, 0.10, 0.12),
+        .init("orange", "Orange", .acrylic, 0.95, 0.45, 0.08),
+        .init("yellow", "Yellow", .acrylic, 0.98, 0.82, 0.10),
+        .init("green", "Green", .acrylic, 0.10, 0.55, 0.25),
+        .init("blue", "Blue", .acrylic, 0.10, 0.30, 0.75),
+        .init("clear", "Clear", .clearAcrylic, 0.92, 0.96, 0.98),
+        .init("smoke", "Smoke", .clearAcrylic, 0.35, 0.35, 0.38),
+        .init("clear-red", "Transparent Red", .clearAcrylic, 0.90, 0.12, 0.15),
+        .init("clear-orange", "Transparent Orange", .clearAcrylic, 1.00, 0.50, 0.10),
+        .init("clear-yellow", "Transparent Yellow", .clearAcrylic, 1.00, 0.85, 0.15),
+        .init("clear-green", "Transparent Green", .clearAcrylic, 0.15, 0.70, 0.35),
+        .init("clear-blue", "Transparent Blue", .clearAcrylic, 0.15, 0.40, 0.90),
+    ]
+
+    static func named(_ id: String) -> SheetMaterial { all.first { $0.id == id } ?? standard }
+    /// The gallery and every newly opened box show MDF.
+    static let standard = all.first { $0.id == "mdf" }!
+
+    private static let materials = Dictionary(uniqueKeysWithValues: all.map { ($0.id, $0.makeMaterial()) })
+    var scn: SCNMaterial { Self.materials[id]! }
+
+    /// Wood edges are laser-browned; acrylic edges keep the colour, and clear acrylic's glow a little.
+    private func makeMaterial() -> SCNMaterial {
+        switch kind {
+        case .wood: Self.surface(color, roughness: 0.8, edge: "float3(0.46, 0.37, 0.31)")
+        case .acrylic: Self.surface(color, roughness: 0.25, edge: "float3(0.85)")
+        case .clearAcrylic: Self.surface(color, roughness: 0.05, edge: "float3(1.25)")
+        }
+    }
+
+    /// The extrusion's side faces (normal ⟂ z) are the cut edges: their colour is multiplied by `edge`.
+    static func surface(_ color: NSColor, roughness: Double, edge: String) -> SCNMaterial {
+        let m = SCNMaterial()
+        m.diffuse.contents = color
+        m.lightingModel = .physicallyBased
+        m.roughness.contents = roughness
+        m.metalness.contents = 0.0
+        m.isDoubleSided = true
+        m.shaderModifiers = [
+            .geometry: "_geometry.texcoords[0] = float2(abs(_geometry.normal.z), 0.0);",
+            .surface: "_surface.diffuse.rgb *= mix(\(edge), float3(1.0), smoothstep(0.3, 0.7, _surface.diffuseTexcoord.x));",
+        ]
+        return m
+    }
+
+    /// A round colour chip for the menu.
+    var swatch: NSImage {
+        NSImage(size: NSSize(width: 14, height: 14), flipped: false) { rect in
+            let dot = NSBezierPath(ovalIn: rect.insetBy(dx: 1, dy: 1))
+            color.withAlphaComponent(kind == .clearAcrylic ? 0.55 : 1).setFill()
+            dot.fill()
+            NSColor.separatorColor.setStroke()
+            dot.stroke()
+            return true
+        }
     }
 }

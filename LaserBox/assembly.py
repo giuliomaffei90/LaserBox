@@ -6,7 +6,7 @@ recipe per generator says where each part goes. Flexed regions are bent by slici
 narrow strips that follow an arc.
 
 Protocol: assemble(name, args) -> {"pieces": [{"rings": [[[u, v], …], …], "origin": [x, y, z],
-"u": [..], "v": [..], "side": ±1, "t": thickness}, …]}  — world(u, v, w) = origin + u·U + v·V + w·side·(U×V)
+"u": [..], "v": [..], "side": ±1, "t": thickness[, "decoration": kind]}, …]}  — world(u, v, w) = origin + u·U + v·V + w·side·(U×V)
 """
 import math
 
@@ -306,10 +306,10 @@ def OpenBox(box, parts):
     x, y, h = box.x, box.y, box.h
     if box.outside:
         x, y, h = box.adjustSize(x), box.adjustSize(y, False), box.adjustSize(h, False)
-    return [  # by drawing order: back, left, right, bottom
+    return [  # by drawing order: back, left, right, bottom; the sides' u runs back → open front
         Placement((0, y, 0), X, Z, -1),
-        Placement((0, 0, 0), Y, Z, -1),
-        Placement((x, 0, 0), Y, Z, 1),
+        Placement((0, y, 0), (0, -1, 0), Z, 1),
+        Placement((x, y, 0), (0, -1, 0), Z, -1),
         Placement((0, 0, 0), X, Y, -1),
     ]
 
@@ -339,6 +339,59 @@ def TypeTray(box, parts):
         place[f"inner y {i + 1}"] = Placement((pos, 0, 0), Y, Z, 1)
         pos += t
     return place
+
+
+@recipe
+def NotesHolder(box, parts):
+    t, y, sx = box.thickness, box.y, list(box.sx)
+    x = sum(sx) + t * (len(sx) - 1)
+    o = max(0, min(box.opening, 100)) / 100
+    out = []
+    # Drawn going round: left side, front (left → right), right side, back (right → left, sx reversed).
+    for s, (wall, start, d) in enumerate([(((0, y, 0), (0, -1, 0)), (0, 0, 0), X),
+                                          (((x, 0, 0), Y), (x, y, 0), (-1, 0, 0))]):
+        out.append(Placement(*wall, Z, 1))
+        if box.opening == 0.0 or (s and not box.back_openings):
+            out.append(Placement(start, d, Z, 1))
+            continue
+        out.append(Placement(start, d, Z, 1))
+        pos = 0
+        for a, b in zip(sx, sx[1:]):  # the pieces around each divider
+            pos += a
+            out.append(Placement(_add(start, d, pos - a * (1 - o) / 2), d, Z, 1))
+            pos += t
+        out.append(Placement(_add(start, d, x), tuple(-c for c in d), Z, -1))  # drawn mirrored
+        sx = sx[::-1]
+    if box.bottom_edge != "e":
+        out.append(Placement((0, 0, 0), X, Y, -1))
+    pos = 0
+    for s in box.sx[:-1]:
+        pos += s
+        out.append(Placement((pos, 0, 0), Y, Z, 1))
+        pos += t
+    return out
+
+
+# Decorations: things shown in the box in the 3D view but never cut (notes in a notes holder…).
+# name -> fn(box) -> pieces, each marked with its "decoration" kind, which picks the look in the app.
+DECORATIONS = {}
+
+
+def decoration(generator, kind):
+    def register(fn):
+        DECORATIONS[generator] = lambda box: [dict(p, decoration=kind) for p in fn(box)]
+        return fn
+    return register
+
+
+@decoration("NotesHolder", "paper")
+def notes_stack(box):
+    """A stack of notes in each compartment, 1 mm clear of the walls, three quarters full."""
+    t, y, out, pos = box.thickness, box.y, [], 0
+    for s in box.sx:
+        out += Placement((pos + 1, 1, 0), X, Y, 1).pieces([rect(0, 0, s - 2, y - 2)], box.h * 0.75)
+        pos += s + t
+    return out
 
 
 @recipe
@@ -400,6 +453,7 @@ def assemble(box):
     """Runs the generator with the recording hooks and returns the placed pieces."""
     install()
     RECORDS["all"], RECORDS["current"], RECORDS["pending"] = [], None, {}
+    box.reference = 0  # the reference rectangle (bottom left of the sheet) is never part of the box
     box.open()
     box.render()
     parts = [p for p in box.ctx._dwg.parts if p.pathes and getattr(p, "record", None) is not None]
@@ -423,4 +477,5 @@ def assemble(box):
         cuts = []
         polys = polygons_of(loops_of(part, matrix, cuts), cuts)
         pieces += placement.pieces(polys, box.thickness)
+    pieces += DECORATIONS.get(type(box).__name__, lambda b: [])(box)
     return {"pieces": pieces, "count": len(parts)}

@@ -61,6 +61,16 @@
         }
       }
     },
+    "Acrylic": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Acrilico"
+          }
+        }
+      }
+    },
     "All Boxes": {
       "localizations": {
         "it": {
@@ -77,6 +87,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "Assemblata"
+          }
+        }
+      }
+    },
+    "Beech": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faggio"
+          }
+        }
+      }
+    },
+    "Birch Plywood": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compensato di betulla"
+          }
+        }
+      }
+    },
+    "Black": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nero"
+          }
+        }
+      }
+    },
+    "Blue": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blu"
           }
         }
       }
@@ -121,6 +171,36 @@
         }
       }
     },
+    "Cherry": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ciliegio"
+          }
+        }
+      }
+    },
+    "Choose the material for the 3D view": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scegli il materiale per la vista 3D"
+          }
+        }
+      }
+    },
+    "Clear": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Incolore"
+          }
+        }
+      }
+    },
     "Couldn’t Export the File": {
       "localizations": {
         "it": {
@@ -147,6 +227,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "DXF…"
+          }
+        }
+      }
+    },
+    "Decorations": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decorazioni"
           }
         }
       }
@@ -191,6 +281,16 @@
         }
       }
     },
+    "Green": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verde"
+          }
+        }
+      }
+    },
     "Hide the parameters": {
       "localizations": {
         "it": {
@@ -221,12 +321,32 @@
         }
       }
     },
+    "MDF": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MDF"
+          }
+        }
+      }
+    },
     "Made by someone": {
       "localizations": {
         "it": {
           "stringUnit": {
             "state": "translated",
             "value": "Realizzata da qualcuno"
+          }
+        }
+      }
+    },
+    "Material": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Materiale"
           }
         }
       }
@@ -251,6 +371,16 @@
         }
       }
     },
+    "Orange": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arancione"
+          }
+        }
+      }
+    },
     "Parameters": {
       "localizations": {
         "it": {
@@ -261,12 +391,32 @@
         }
       }
     },
+    "Poplar Plywood": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compensato di pioppo"
+          }
+        }
+      }
+    },
     "Python isn’t included in the app. Run scripts/bundle-runtime.sh and build again.": {
       "localizations": {
         "it": {
           "stringUnit": {
             "state": "translated",
             "value": "Python non è incluso nell’app. Esegui scripts/bundle-runtime.sh e ricompila."
+          }
+        }
+      }
+    },
+    "Red": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rosso"
           }
         }
       }
@@ -301,6 +451,16 @@
         }
       }
     },
+    "Show or hide the decorations: what goes in the box, which isn’t cut": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostra o nascondi le decorazioni: ciò che va nella scatola e non viene tagliato"
+          }
+        }
+      }
+    },
     "Show the cut sheet or the assembled box": {
       "localizations": {
         "it": {
@@ -331,6 +491,16 @@
         }
       }
     },
+    "Smoke": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fumé"
+          }
+        }
+      }
+    },
     "The boxes.py engine quit unexpectedly.": {
       "localizations": {
         "it": {
@@ -341,12 +511,112 @@
         }
       }
     },
+    "Transparent Acrylic": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Acrilico trasparente"
+          }
+        }
+      }
+    },
+    "Transparent Blue": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blu trasparente"
+          }
+        }
+      }
+    },
+    "Transparent Green": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verde trasparente"
+          }
+        }
+      }
+    },
+    "Transparent Orange": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arancione trasparente"
+          }
+        }
+      }
+    },
+    "Transparent Red": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rosso trasparente"
+          }
+        }
+      }
+    },
+    "Transparent Yellow": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Giallo trasparente"
+          }
+        }
+      }
+    },
     "View": {
       "localizations": {
         "it": {
           "stringUnit": {
             "state": "translated",
             "value": "Vista"
+          }
+        }
+      }
+    },
+    "Walnut": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noce"
+          }
+        }
+      }
+    },
+    "White": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bianco"
+          }
+        }
+      }
+    },
+    "Wood": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Legno"
+          }
+        }
+      }
+    },
+    "Yellow": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Giallo"
           }
         }
       }
