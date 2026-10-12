@@ -16,7 +16,9 @@ uv python install "$PY_VERSION"
 cp -R "$(dirname "$(dirname "$(uv python find --managed-python "$PY_VERSION")")")" Runtime/python
 Runtime/python/bin/python3 -m pip install --quiet --no-compile --target Runtime/site "$src"
 
-# Gallery pictures: the web site's photos, smaller; a drawing for generators without a photo.
+# Gallery pictures: the isometric illustrations (Illustrations/, rendered by scripts/illustrate),
+# the web site's photos for the info panel, and a drawing for generators that have neither.
+cp Illustrations/*.png Runtime/samples/
 for f in "$src"/static/samples/*.jpg; do
   [[ $f == *-thumb.jpg ]] || sips -Z 640 -s formatOptions 70 "$f" --out Runtime/samples/ >/dev/null
 done
@@ -26,7 +28,7 @@ sys.argv = ["bridge"]
 sys.path.insert(0, "LaserBox")
 import bridge
 for name in bridge.GENERATORS:
-    if not os.path.exists(f"Runtime/samples/{name}.jpg"):
+    if not any(os.path.exists(f"Runtime/samples/{name}.{ext}") for ext in ("png", "jpg")):
         with open(f"Runtime/samples/{name}.svg", "w") as f:
             f.write(bridge.render(name, {}, "svg"))
 PY
