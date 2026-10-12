@@ -6,13 +6,23 @@ final class BoxModel {
     var groups: [GeneratorGroup] = []
     /// The generator open in the editor.
     var selection: String? {
-        didSet { if selection != oldValue { spec = nil; svg = nil; error = nil; Task { await loadSpec() } } }
+        didSet { if selection != oldValue { spec = nil; svg = nil; assembly = nil; assemblyError = nil; error = nil; Task { await loadSpec() } } }
     }
     var spec: GeneratorSpec?
     var svg: String?
+    var assembly: Assembly?
+    /// Identifies the geometry in `assembly` (generator + parameters) so views rebuild only when it changes.
+    var assemblyKey = ""
+    /// Why the 3D view is unavailable for this box (no recipe yet, or a failure).
+    var assemblyError: String?
+    var showsAssembly = false {
+        didSet { if showsAssembly, assembly == nil { scheduleRender(delay: .zero) } }
+    }
     var error: String?
     var isRendering = false
     var startupError: String?
+    /// Assembled boxes with default parameters, for the gallery cards.
+    var galleryAssemblies: [String: Assembly] = [:]
 
     /// Values the user changed, per generator, so switching box type and back keeps them.
     private var overrides: [String: [String: String]] = [:]
@@ -49,6 +59,13 @@ final class BoxModel {
         scheduleRender(delay: .zero)
     }
 
+    func loadGalleryAssembly(_ name: String) async {
+        guard let bridge, galleryAssemblies[name] == nil else { return }
+        if let assembly = try? await bridge.assemble(name, args: [:]) {
+            galleryAssemblies[name] = assembly
+        }
+    }
+
     /// The cut file in the given format ("svg" or "dxf") for the current settings.
     func export(format: String) async throws -> Data {
         guard let bridge, let name = spec?.name else { throw BridgeError(errorDescription: String(localized: "No box is open.")) }
@@ -79,6 +96,20 @@ final class BoxModel {
                 guard !Task.isCancelled else { return }
                 self.svg = svg
                 error = nil
+                if showsAssembly {
+                    do {
+                        let args = overrides[name] ?? [:]
+                        let assembly = try await bridge.assemble(name, args: args)
+                        guard !Task.isCancelled else { return }
+                        self.assembly = assembly
+                        assemblyKey = name + "|" + args.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: ";")
+                        assemblyError = nil
+                    } catch {
+                        guard !Task.isCancelled else { return }
+                        assembly = nil
+                        assemblyError = error.localizedDescription
+                    }
+                }
             } catch {
                 guard !Task.isCancelled else { return }
                 self.error = error.localizedDescription

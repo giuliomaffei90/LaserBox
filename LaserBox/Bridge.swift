@@ -8,6 +8,7 @@ struct GeneratorGroup: Decodable, Identifiable {
 
 struct GeneratorInfo: Decodable, Identifiable, Hashable {
     let name, title, doc: String
+    let assembled: Bool  // has a 3D assembly recipe
     var id: String { name }
 }
 
@@ -31,6 +32,19 @@ struct Arg: Decodable, Identifiable {
 
 struct Choice: Decodable {
     let value, label: String
+}
+
+/// One flat piece of the assembled box: polygon rings in mm (first ring outer, the rest holes),
+/// extruded by t along side·(u×v) and placed at origin.
+struct Piece: Decodable {
+    let rings: [[[Double]]]
+    let origin, u, v: [Double]
+    let side: Int
+    let t: Double
+}
+
+struct Assembly: Decodable {
+    let pieces: [Piece]
 }
 
 struct BridgeError: LocalizedError {
@@ -73,6 +87,10 @@ final class Bridge: @unchecked Sendable {
     func render(_ name: String, args: [String: String], format: String) async throws -> String {
         struct Reply: Decodable { let data: String }
         return try await send(["cmd": "render", "name": name, "args": args, "format": format], as: Reply.self).data
+    }
+
+    func assemble(_ name: String, args: [String: String]) async throws -> Assembly {
+        try await send(["cmd": "assemble", "name": name, "args": args], as: Assembly.self)
     }
 
     private func send<T: Decodable>(_ request: [String: Any], as: T.Type) async throws -> T {

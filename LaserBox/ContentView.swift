@@ -27,7 +27,7 @@ struct ContentView: View {
             .navigationSplitViewColumnWidth(min: 200, ideal: 230)
         } detail: {
             NavigationStack(path: $path) {
-                GalleryView(model: model, category: category ?? .all)
+                GalleryView(model: model, category: category ?? .all) { path.append($0) }
                     .navigationDestination(for: GeneratorInfo.self) { EditorView(model: model, generator: $0) }
             }
         }
@@ -55,7 +55,9 @@ struct ContentView: View {
 struct GalleryView: View {
     let model: BoxModel
     let category: Category
+    let open: (GeneratorInfo) -> Void
     @State private var search = ""
+    @AppStorage("cardSize") private var cardSize = 220.0
 
     private var sections: [GeneratorGroup] {
         let groups = switch category {
@@ -89,11 +91,15 @@ struct GalleryView: View {
                         if !group.description.isEmpty {
                             Text(group.description).foregroundStyle(.secondary)
                         }
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 190, maximum: 260), spacing: 20, alignment: .top)],
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: cardSize, maximum: cardSize * 1.3), spacing: 20, alignment: .top)],
                                   alignment: .leading, spacing: 26) {
                             ForEach(group.generators) { generator in
-                                NavigationLink(value: generator) { GeneratorCard(generator: generator) }
-                                    .buttonStyle(.plain)
+                                if generator.assembled {
+                                    GeneratorCard(generator: generator, model: model) { open(generator) }
+                                } else {
+                                    NavigationLink(value: generator) { GeneratorCard(generator: generator) }
+                                        .buttonStyle(.plain)
+                                }
                             }
                         }
                     }
@@ -113,20 +119,63 @@ struct GalleryView: View {
         .navigationTitle(title)
         .navigationSubtitle(model.groups.isEmpty ? "" : String(localized: "\(sections.reduce(0) { $0 + $1.generators.count }) boxes"))
         .searchable(text: $search, prompt: "Search Boxes")
+        .toolbar {
+            ToolbarItem {
+                Slider(value: $cardSize, in: 140...420) {
+                    Text("Card Size")
+                } minimumValueLabel: {
+                    Image(systemName: "square.grid.3x3").accessibilityHidden(true)
+                } maximumValueLabel: {
+                    Image(systemName: "square.grid.2x2").accessibilityHidden(true)
+                }
+                .labelsHidden()
+                .frame(width: 150)
+                .padding(.horizontal, 8)
+                .help("Size of the boxes in the gallery")
+            }
+        }
     }
 }
 
 struct GeneratorCard: View {
     let generator: GeneratorInfo
+    var model: BoxModel? = nil           // set for boxes shown as a live 3D model
+    var open: (() -> Void)? = nil
     @State private var hovering = false
+    @State private var yaw: CGFloat = 0
+    @State private var pitch: CGFloat = 0
+    @State private var dragStart: (CGFloat, CGFloat)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Color.clear
                 .aspectRatio(1, contentMode: .fit)
-                .overlay { SampleImage(name: generator.name) }
+                .overlay {
+                    if let model {
+                        Group {
+                            if let assembly = model.galleryAssemblies[generator.name] {
+                                AssemblyView(assembly: assembly, key: generator.name, interactive: false, yaw: yaw, pitch: pitch)
+                            } else {
+                                ProgressView()
+                            }
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(.fill.tertiary)
+                        .task { await model.loadGalleryAssembly(generator.name) }
+                        // Drag turns the box; a plain click opens it.
+                        .contentShape(.rect)
+                        .gesture(DragGesture(minimumDistance: 3).onChanged { value in
+                            if dragStart == nil { dragStart = (yaw, pitch) }
+                            yaw = dragStart!.0 + value.translation.width / 80
+                            pitch = max(-1.2, min(1.2, dragStart!.1 + value.translation.height / 120))
+                        }.onEnded { _ in dragStart = nil })
+                        .onTapGesture { open?() }
+                    } else {
+                        SampleImage(name: generator.name)
+                    }
+                }
                 .clipShape(.rect(cornerRadius: 12))
-                .shadow(color: .black.opacity(hovering ? 0.25 : 0.12), radius: hovering ? 10 : 4, y: hovering ? 4 : 1)
+                .shadow(color: .black.opacity(hovering ? 0.18 : 0.06), radius: hovering ? 10 : 3, y: hovering ? 4 : 1)
                 .scaleEffect(hovering ? 1.02 : 1)
                 .padding(.bottom, 4)
             Text(generator.title)
@@ -143,14 +192,23 @@ struct GeneratorCard: View {
     }
 }
 
-/// The web site's photo of a box, or its default drawing when nobody has photographed one yet.
+/// The isometric illustration of a box; the web site's photo or the default drawing as fallbacks.
 struct SampleImage: View {
     let name: String
+    var photo = false  // true shows the real photo instead, when there is one
     private static let cache = NSCache<NSString, NSImage>()
     private static let folder = Bundle.main.resourceURL!.appending(path: "Runtime/samples")
 
+    static func hasPhoto(_ name: String) -> Bool { image("\(name).jpg") != nil }
+
     var body: some View {
-        if let photo = Self.image("\(name).jpg") {
+        if photo, let photo = Self.image("\(name).jpg") {
+            Image(nsImage: photo).resizable().scaledToFill()
+        } else if let illustration = Self.image("\(name).png") {
+            Image(nsImage: illustration).resizable().scaledToFit().padding(6)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(.fill.tertiary)
+        } else if let photo = Self.image("\(name).jpg") {
             Image(nsImage: photo).resizable().scaledToFill()
         } else if let drawing = Self.image("\(name).svg") {
             Image(nsImage: drawing).resizable().scaledToFit().padding(14)

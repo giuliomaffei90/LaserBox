@@ -4,6 +4,7 @@ Reads one JSON request per line on stdin, writes one JSON response per line on s
   {"cmd": "list"}                                   -> {"groups": [...]}
   {"cmd": "args", "name": "UniversalBox"}           -> {"groups": [...]}
   {"cmd": "render", "name": ..., "args": {...}, "format": "svg"|"dxf"} -> {"data": "..."}
+  {"cmd": "assemble", "name": ..., "args": {...}}  -> {"pieces": [...]} (see assembly.py)
 Errors come back as {"error": "..."}.
 Texts are translated with locale/<LASERBOX_LANG>/LC_MESSAGES/boxes.py.mo next to this file.
 """
@@ -20,6 +21,8 @@ import boxes
 import boxes.generators
 import markdown
 from boxes.generators.traylayout import TrayLayoutFile
+
+import assembly
 from svgpathtools import Line, parse_path
 
 TRANSLATIONS = gettext.translation("boxes.py", os.path.join(os.path.dirname(os.path.abspath(__file__)), "locale"),
@@ -43,7 +46,8 @@ def doc(cls):
 
 
 def info(cls):
-    return {"name": cls.__name__, "title": tr(cls.__name__), "doc": doc(cls)}
+    return {"name": cls.__name__, "title": tr(cls.__name__), "doc": doc(cls),
+            "assembled": cls.__name__ in assembly.RECIPES}
 
 
 def list_generators():
@@ -164,6 +168,14 @@ def handle(req):
         return generator_args(req["name"])
     if req["cmd"] == "render":
         return {"data": render(req["name"], req.get("args", {}), req.get("format", "svg"))}
+    if req["cmd"] == "assemble":
+        box = GENERATORS[req["name"]]()
+        box.translations = TRANSLATIONS
+        try:
+            box.parseArgs([f"--{k}={v}" for k, v in req.get("args", {}).items()])
+            return assembly.assemble(box)
+        except Exception as e:
+            raise ValueError(translate_error(str(e), box)) from e
     raise ValueError(f"unknown command {req['cmd']}")
 
 

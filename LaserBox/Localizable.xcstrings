@@ -71,6 +71,16 @@
         }
       }
     },
+    "Assembled": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Assemblata"
+          }
+        }
+      }
+    },
     "Can’t Draw This Box": {
       "localizations": {
         "it": {
@@ -91,6 +101,16 @@
         }
       }
     },
+    "Card Size": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dimensione schede"
+          }
+        }
+      }
+    },
     "Categories": {
       "localizations": {
         "it": {
@@ -107,6 +127,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Impossibile esportare il file"
+          }
+        }
+      }
+    },
+    "Cut Sheet": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tracciato"
           }
         }
       }
@@ -191,6 +221,26 @@
         }
       }
     },
+    "Made by someone": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Realizzata da qualcuno"
+          }
+        }
+      }
+    },
+    "No 3D View for This Box": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessuna vista 3D per questa scatola"
+          }
+        }
+      }
+    },
     "No box is open.": {
       "localizations": {
         "it": {
@@ -251,6 +301,16 @@
         }
       }
     },
+    "Show the cut sheet or the assembled box": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostra il tracciato di taglio o la scatola assemblata"
+          }
+        }
+      }
+    },
     "Show the parameters": {
       "localizations": {
         "it": {
@@ -261,12 +321,32 @@
         }
       }
     },
+    "Size of the boxes in the gallery": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dimensione delle scatole nella galleria"
+          }
+        }
+      }
+    },
     "The boxes.py engine quit unexpectedly.": {
       "localizations": {
         "it": {
           "stringUnit": {
             "state": "translated",
             "value": "Il motore di boxes.py si è chiuso inaspettatamente."
+          }
+        }
+      }
+    },
+    "View": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vista"
           }
         }
       }

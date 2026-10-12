@@ -1,3 +1,4 @@
+import SceneKit
 import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
@@ -59,7 +60,25 @@ struct EditorView: View {
     }
 
     @ViewBuilder private var preview: some View {
-        if let svg = model.svg, ready {
+        if model.showsAssembly, ready {
+            Group {
+                if let assembly = model.assembly {
+                    AssemblyView(assembly: assembly, key: model.assemblyKey)
+                } else if let error = model.assemblyError {
+                    ContentUnavailableView("No 3D View for This Box", systemImage: "cube.transparent", description: Text(error))
+                } else {
+                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+            .overlay(alignment: .top) {
+                if let error = model.error {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .background(.regularMaterial, in: .capsule)
+                        .padding()
+                }
+            }
+        } else if let svg = model.svg, ready {
             SVGPreview(svg: svg)
                 .overlay(alignment: .top) {
                     if let error = model.error {
@@ -78,6 +97,14 @@ struct EditorView: View {
     }
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
+        ToolbarItem(placement: .principal) {
+            Picker("View", selection: Binding { model.showsAssembly } set: { model.showsAssembly = $0 }) {
+                Text("Cut Sheet").tag(false)
+                Text("Assembled").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .help("Show the cut sheet or the assembled box")
+        }
         if model.isRendering {
             ToolbarItem {
                 ProgressView().controlSize(.small)
@@ -196,27 +223,36 @@ struct ParametersForm: View {
     }
 }
 
-/// Photo, summary and the long description from boxes.py.
+/// Illustration, summary, the long description from boxes.py and the web site's photo of a real one.
 struct BoxInfo: View {
     let generator: GeneratorInfo
     let html: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Color.clear
-                .frame(height: 260)
-                .overlay { SampleImage(name: generator.name) }
-                .clipShape(.rect(cornerRadius: 10))
-            Text(generator.title).font(.title3.bold())
-            Text(generator.doc).foregroundStyle(.secondary)
-            if !html.isEmpty {
-                HTMLView(html: html)
-                    .frame(minHeight: 220)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Color.clear
+                    .frame(height: 260)
+                    .overlay { SampleImage(name: generator.name) }
+                    .clipShape(.rect(cornerRadius: 10))
+                Text(generator.title).font(.title3.bold())
+                Text(generator.doc).foregroundStyle(.secondary)
+                if !html.isEmpty {
+                    HTMLView(html: html)
+                        .frame(height: 220)
+                }
+                if SampleImage.hasPhoto(generator.name) {
+                    Text("Made by someone").font(.headline).padding(.top, 4)
+                    Color.clear
+                        .frame(height: 260)
+                        .overlay { SampleImage(name: generator.name, photo: true) }
+                        .clipShape(.rect(cornerRadius: 10))
+                }
             }
+            .padding()
         }
-        .padding()
         .frame(width: 440)
-        .frame(maxHeight: 640)
+        .frame(maxHeight: 700)
     }
 }
 
@@ -281,5 +317,154 @@ struct SVGPreview: NSViewRepresentable {
             loaded = true
             if let pending { show(pending, in: view) }
         }
+    }
+}
+
+/// The assembled box: every piece extruded and placed, plywood with laser-darkened cut edges.
+/// `interactive` gives the full orbit/zoom camera; otherwise `yaw`/`pitch` turn the box.
+struct AssemblyView: NSViewRepresentable {
+    let assembly: Assembly
+    let key: String          // changes when the geometry changes
+    var interactive = true
+    var yaw: CGFloat = 0
+    var pitch: CGFloat = 0
+
+    func makeNSView(context: Context) -> SCNView {
+        let view = SCNView()
+        view.allowsCameraControl = interactive
+        view.autoenablesDefaultLighting = false
+        view.antialiasingMode = .multisampling4X
+        view.backgroundColor = .clear
+        view.scene = Self.makeScene(coordinator: context.coordinator)
+        view.pointOfView = context.coordinator.camera
+        return view
+    }
+
+    func updateNSView(_ view: SCNView, context: Context) {
+        let c = context.coordinator
+        if c.key != key {
+            c.key = key
+            c.spin.childNodes.forEach { $0.removeFromParentNode() }
+            let box = SCNNode()
+            for piece in assembly.pieces { box.addChildNode(Self.node(for: piece)) }
+            let (minV, maxV) = box.boundingBox
+            box.position = SCNVector3(-(minV.x + maxV.x) / 2, -(minV.y + maxV.y) / 2, -(minV.z + maxV.z) / 2)
+            let tilt = SCNNode()           // boxes.py is z-up, SceneKit y-up
+            tilt.eulerAngles.x = -.pi / 2
+            tilt.addChildNode(box)
+            c.spin.addChildNode(tilt)
+            let dx = maxV.x - minV.x, dy = maxV.y - minV.y, dz = maxV.z - minV.z
+            let size = sqrt(dx * dx + dy * dy + dz * dz)   // the diagonal: fits from any angle
+            if abs(size - c.size) > 0.5 || !interactive {
+                c.size = size
+                c.frame(size: size, interactive: interactive)
+                view.pointOfView = c.camera
+            }
+        }
+        c.spin.eulerAngles = SCNVector3(pitch, yaw, 0)
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    final class Coordinator {
+        var key = ""
+        var size: CGFloat = 0
+        let spin = SCNNode()
+        let camera = SCNNode()
+        let sun = SCNNode()
+
+        func frame(size: CGFloat, interactive: Bool) {
+            let cam = camera.camera!
+            cam.orthographicScale = Double(size) * (interactive ? 0.6 : 0.54)
+            camera.position = SCNVector3(size * 2, size * 1.5, size * 2)
+            camera.look(at: SCNVector3Zero)
+            cam.zFar = Double(size) * 20
+            cam.screenSpaceAmbientOcclusionRadius = Double(size) * 0.05
+            let light = sun.light!
+            light.orthographicScale = Double(size) * 1.2
+            light.zNear = 1; light.zFar = Double(size) * 8   // the shadow map must reach the whole box
+            sun.position = SCNVector3(size * 0.9, size * 2.2, size * 1.4)
+            sun.look(at: SCNVector3Zero)
+        }
+    }
+
+    private static func makeScene(coordinator c: Coordinator) -> SCNScene {
+        let scene = SCNScene()
+        scene.rootNode.addChildNode(c.spin)
+
+        let cam = SCNCamera()
+        cam.usesOrthographicProjection = true
+        cam.zNear = 1; cam.zFar = 10000
+        // Ambient occlusion darkens the joints and the inside corners.
+        cam.screenSpaceAmbientOcclusionIntensity = 2.2
+        cam.screenSpaceAmbientOcclusionBias = 0.3
+        cam.screenSpaceAmbientOcclusionDepthThreshold = 2
+        cam.screenSpaceAmbientOcclusionNormalThreshold = 0.1
+        c.camera.camera = cam
+        scene.rootNode.addChildNode(c.camera)
+
+        let sun = SCNLight()
+        sun.type = .directional; sun.intensity = 850
+        sun.castsShadow = true; sun.shadowMode = .deferred; sun.shadowSampleCount = 32
+        sun.shadowMapSize = CGSize(width: 2048, height: 2048)
+        sun.shadowRadius = 5; sun.shadowColor = NSColor(white: 0, alpha: 0.55)
+        sun.automaticallyAdjustsShadowProjection = false
+        c.sun.light = sun
+        scene.rootNode.addChildNode(c.sun)
+
+        let fill = SCNNode()
+        fill.light = SCNLight(); fill.light!.type = .directional; fill.light!.intensity = 250
+        fill.position = SCNVector3(-1, 0.5, -1); fill.look(at: SCNVector3Zero)
+        scene.rootNode.addChildNode(fill)
+
+        let ambient = SCNNode()
+        ambient.light = SCNLight(); ambient.light!.type = .ambient; ambient.light!.intensity = 330
+        scene.rootNode.addChildNode(ambient)
+        return scene
+    }
+
+    /// Plywood whose cut edges (the extrusion's side faces, normal ⟂ z) are laser-browned.
+    private static let wood: SCNMaterial = {
+        let m = SCNMaterial()
+        m.diffuse.contents = NSColor(red: 0.91, green: 0.78, blue: 0.55, alpha: 1)
+        m.lightingModel = .physicallyBased
+        m.roughness.contents = 0.8
+        m.metalness.contents = 0.0
+        m.isDoubleSided = true
+        m.shaderModifiers = [
+            .geometry: "_geometry.texcoords[0] = float2(abs(_geometry.normal.z), 0.0);",
+            .surface: """
+                float face = smoothstep(0.3, 0.7, _surface.diffuseTexcoord.x);
+                _surface.diffuse.rgb = mix(float3(0.42, 0.29, 0.17), _surface.diffuse.rgb, face);
+                """,
+        ]
+        return m
+    }()
+
+    /// SCNShape extrudes a flat path along z, centred; the path's even-odd rule turns inner rings into holes.
+    private static func node(for piece: Piece) -> SCNNode {
+        let path = NSBezierPath()
+        path.windingRule = .evenOdd
+        for ring in piece.rings where ring.count >= 3 {
+            path.move(to: NSPoint(x: ring[0][0], y: ring[0][1]))
+            for p in ring.dropFirst() { path.line(to: NSPoint(x: p[0], y: p[1])) }
+            path.close()
+        }
+        path.flatness = 0.2
+        let shape = SCNShape(path: path, extrusionDepth: CGFloat(piece.t))
+        shape.materials = [wood]
+        let node = SCNNode(geometry: shape)
+        let u = SCNVector3(piece.u[0], piece.u[1], piece.u[2])
+        let v = SCNVector3(piece.v[0], piece.v[1], piece.v[2])
+        let s = CGFloat(piece.side)
+        let n = SCNVector3(s * (u.y * v.z - u.z * v.y), s * (u.z * v.x - u.x * v.z), s * (u.x * v.y - u.y * v.x))
+        let o = piece.origin
+        let half = CGFloat(piece.t) / 2
+        node.transform = SCNMatrix4(
+            m11: u.x, m12: u.y, m13: u.z, m14: 0,
+            m21: v.x, m22: v.y, m23: v.z, m24: 0,
+            m31: n.x, m32: n.y, m33: n.z, m34: 0,
+            m41: CGFloat(o[0]) + n.x * half, m42: CGFloat(o[1]) + n.y * half, m43: CGFloat(o[2]) + n.z * half, m44: 1)
+        return node
     }
 }
