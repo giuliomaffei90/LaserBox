@@ -158,13 +158,22 @@ def _is_black(rgb):
 def loops_of(part, inverse, cuts=None):
     """Closed loops of a drawn part, in the part's local coordinates. Open black polylines (flex
     cuts, slits) are appended to `cuts` when given."""
-    loops, cur = [], []
+    loops, cur, opens = [], [], []  # opens: [points, black]
 
     def flush(path):
         if len(cur) > 2 and math.dist(cur[0], cur[-1]) < 0.2:  # a corner's kerf offset can leave 0.14
             loops.append(cur[:-1] if len(cur) > 3 else cur)
-        elif len(cur) > 1 and cuts is not None and _is_black(path.params.get("rgb")):
-            cuts.append(list(cur))
+        elif len(cur) > 1:
+            # an outline broken by a hole drawn on the way (SideHingeBox's latch holes) goes on in a
+            # new path: join the pieces back up
+            o = next((o for o in opens if math.dist(o[0][-1], cur[0]) < 0.2), None)
+            if o is None:
+                opens.append([list(cur), _is_black(path.params.get("rgb"))])
+            else:
+                o[0] += cur[1:]
+                if math.dist(o[0][0], o[0][-1]) < 0.2:
+                    opens.remove(o)
+                    loops.append(o[0][:-1])
         cur.clear()
 
     for path in part.pathes:
@@ -179,6 +188,8 @@ def loops_of(part, inverse, cuts=None):
                 p0 = cur[-1] if cur else tuple(inverse * (c[1], c[2]))
                 cur.extend(_bezier(p0, inverse * (c[3], c[4]), inverse * (c[5], c[6]), inverse * (c[1], c[2])))
         flush(path)
+    if cuts is not None:
+        cuts += [o for o, black in opens if black]
     return loops
 
 
@@ -433,13 +444,14 @@ def NotesHolder(box, parts):
 # holder…), registered here, and parts like a lifted lid, marked by their Placement. A kind with its
 # own look in the app (paper) gets that; any other kind (lid, panel — a removable back) is drawn in
 # the box's material. The gallery always hides lids.
-# name -> fn(box) -> pieces, each marked with its "decoration" kind.
+# name -> fn(box) -> pieces, each marked with its "decoration" kind (a piece may set its own: a die's
+# pips).
 DECORATIONS = {}
 
 
 def decoration(generator, kind):
     def register(fn):
-        DECORATIONS[generator] = lambda box: [dict(p, decoration=kind) for p in fn(box)]
+        DECORATIONS[generator] = lambda box: [dict(p, decoration=p.get("decoration", kind)) for p in fn(box)]
         return fn
     return register
 
@@ -784,9 +796,10 @@ def Rack19HalfWidth(box, parts):
 def PirateChest(box, parts):
     """Box x × y (front at y = 0), all walls up to the rim h + hy; the chest hinge's axis runs along X
     at the rim, t behind the back wall. The parts are drawn as seen from outside, so the left wall and
-    lid end run back → front. The lid, closed: its ends stand on the side walls with the axis at
-    their back corner, and its panels go round the half polygon — back (its pins in the hinge),
-    n - 2 top panels, front — each from one corner of the lid end to the next, outside it."""
+    lid end run back → front. The lid (a decoration), closed: its ends stand on the side walls with
+    the axis at their back corner, and its panels go round the half polygon — back (its pins in the
+    discs turning in the side walls' rings), n - 2 top panels, front — each from one corner of the
+    lid end to the next, outside it."""
     t = box.thickness
     walls = {p.record.label: p for p in parts if p.record.label}
     x, h = walls["front"].record.args[:2]
@@ -800,20 +813,23 @@ def PirateChest(box, parts):
         a = math.radians(90 + i * 180 / (n - 1))
         corners.append((corners[-1][0] + side * math.cos(a), corners[-1][1] + side * math.sin(a)))
     corners.append((0, 0))
+    left, right = Placement((0, y, 0), (0, -1, 0), Z, 1), Placement((x, 0, 0), Y, Z, 1)
     out = [
         (walls["Bottom"], Placement((0, 0, 0), X, Y, -1)),
         (walls["front"], Placement((0, 0, 0), X, Z, 1)),
         (walls["back"], Placement((x, y, 0), (-1, 0, 0), Z, 1)),
-        (walls["right"], Placement((x, 0, 0), Y, Z, 1)),
-        (walls["left"], Placement((0, y, 0), (0, -1, 0), Z, 1)),
+        (walls["right"], right),
+        (walls["left"], left),
     ]
     panels = [walls["lid back"]] + [p for p in parts if p.record.label == "lid top"] + [walls["lid front"]]
     for p, (a, b) in zip(panels, zip(corners, corners[1:])):
         d = _norm((0, b[0] - a[0], b[1] - a[1]))
-        out.append((p, Placement((0, a[0], rim + a[1]), X, d, -1)))
+        out.append((p, Placement((0, a[0], rim + a[1]), X, d, -1, decoration="lid")))
     lid_left, lid_right = [p for p in parts if not p.record.label][-2:]
-    out.append((lid_left, Placement((0, y + t, rim), (0, -1, 0), Z, 1)))   # axis at its (0, 0)
-    out.append((lid_right, Placement((x, -t, rim), Y, Z, 1)))              # axis at its (y + 2t, 0)
+    out.append((lid_left, Placement((0, y + t, rim), (0, -1, 0), Z, 1, decoration="lid")))   # axis at its (0, 0)
+    out.append((lid_right, Placement((x, -t, rim), Y, Z, 1, decoration="lid")))              # axis at its (y + 2t, 0)
+    r = box.edges["O"].startWidth()   # the discs turning in the side walls' rings
+    out += [(_hinge_disc(walls["left"], (-t, rim), r), left), (_hinge_disc(walls["right"], (y + t, rim), r), right)]
     return out
 
 
@@ -844,6 +860,523 @@ def SideDoorHousing(box, parts):
     out += [(q.pop(0), p) for hw in hardware for p in hw[:2]]   # drawn: all latches, then all clamps
     out += [(q.pop(0), p) for hw in hardware for p in hw[2:]]
     return out
+
+
+@recipe
+def SlidingLidBox(box, parts):
+    """x × y × h with the lid sliding out over the front (y = 0, only h high): it lies on the lower
+    rails (top at h) under the upper rails on the side walls' tops and the back rail on the back's.
+    Sides, rails and lid are drawn from the back (u = 0) to the front, the lid's lip standing on its
+    front end between the upper rails."""
+    t, x, y, h = box.thickness, box.x, box.y, box.h
+    top = h + (1 + box.margin_t) * t      # the side walls' top
+    m = box.margin_s * t                  # the lid's side play
+    rail = box.rail_mm - box.burn         # where the back rail and the lid's lip start
+    F = (0, -1, 0)                        # back → front
+    return {
+        "right side": Placement((x, y, 0), F, Z, -1),
+        "left side": Placement((0, y, 0), F, Z, 1),
+        "bottom": Placement((0, 0, 0), Y, X, 1),
+        "top right rail": Placement((x, y, top), F, (-1, 0, 0), -1),
+        "top left rail": Placement((0, y, top), F, X, 1),
+        "bottom right rail": Placement((x, y, h - t), F, (-1, 0, 0), -1),
+        "bottom left rail": Placement((0, y, h - t), F, X, 1),
+        "lid": Placement((m, y, h), F, X, 1, decoration="lid"),
+        "lid lip": Placement((m + rail, 0, h + t), X, Z, 1, decoration="lid"),
+        "back": Placement((0, y, 0), X, Z, -1),
+        "front": Placement((0, 0, 0), X, Z, 1),
+        "back rail": Placement((rail, y, top), X, F, -1),
+    }
+
+
+@recipe
+def CardBox(box, parts):
+    """Outer walls round x × y, h + t high; x holds an inner side glued inside each end (h high, drawn
+    with its finger cutout at the bottom edge: it goes upside down), the compartments sx and the
+    dividers. The lid lies at h on the inner walls and slides out over the lowered wall — the front,
+    or the right side (then inlays glued to front and back in each compartment carry it) — under the
+    lips on the two walls along it; its lip stands on its leading end, the topper between the lips."""
+    t, x, y, h, sx = box.thickness, box.boxwidth, box.boxdepth, box.boxhight, box.sx
+    starts, pos = [], t   # of the compartments
+    for s in sx:
+        starts.append(pos)
+        pos += s + t
+    down = (0, 0, -1)
+    place = {
+        "Bottom": Placement((0, 0, 0), X, Y, -1),
+        "Front": Placement((0, 0, 0), X, Z, 1),
+        "Back": Placement((0, y, 0), X, Z, -1),
+        "Outer Side Left": Placement((0, 0, 0), Y, Z, -1),
+        "Outer Side Right": Placement((x, 0, 0), Y, Z, 1),
+        "Inner Side Left": Placement((0, 0, h), Y, down, -1),
+        "Inner Side Right": Placement((x, 0, h), Y, down, 1),
+    }
+    if box.openingdirection == "front":   # the lid from the back (v = 0) to the front
+        place.update({
+            "Lid": Placement((0.1 * t, y, h), X, (0, -1, 0), -1, decoration="lid"),
+            "Lid Lip": Placement((0.1 * t, 0, h + t), X, Z, 1, decoration="lid"),
+            "Lid topper (optional)": Placement((1.1 * t, 0, h + t), X, Y, 1, decoration="lid"),
+            "Lip Left": Placement((t, 0, h + t), Y, (-1, 0, 0), 1),
+            "Lip Right": Placement((x, 0, h + t), Y, (-1, 0, 0), 1),
+        })
+    else:                                 # the lid from the left (u = 0) to the right
+        place.update({
+            "Lid": Placement((0, 0.1 * t, h), X, Y, 1, decoration="lid"),
+            "Lid Lip": Placement((x, 0.1 * t, h + t), Y, Z, 1, decoration="lid"),
+            "Lid topper": Placement((0, 1.1 * t, h + t), X, Y, 1, decoration="lid"),
+            "Lip Front": Placement((0, 0, h + t), X, Y, 1),
+            "Lip Back": Placement((0, y - t, h + t), X, Y, 1),
+        })
+    repeated = {
+        "Divider": [Placement((s - t, 0, 0), Z, Y, -1) for s in starts[1:]],
+        "Front inlay": [Placement((s, 0, 0), X, Z, -1) for s in starts],
+        "Back inlay": [Placement((s, y, 0), X, Z, 1) for s in starts],
+    }
+    return [(p, repeated[p.record.label].pop(0) if p.record.label in repeated else place[p.record.label])
+            for p in parts]
+
+
+@recipe
+def RackBox(box, parts):
+    """Rack19Box with mounting ears 2 holedist wide and no labels: back, side, front, side, bottom, lid
+    (a decoration), the corner triangles."""
+    t, x, y, h, tr = box.thickness, box.x, box.y, box.h, box.triangle
+    back, side1, front, side2, bottom, lid, triangles = parts[:7]
+    first = Point(tr - 2, 2)
+    out = [
+        (back, Placement((0, y, 0), X, Z, -1)),
+        (side1, Placement((x, 0, 0), Y, Z, 1)),
+        # the wall starts after the left ear, its floor t above the drawn bottom edge
+        (front, Placement((0, 0, 0), X, Z, 1), ~(front.record.matrix * Affine.translation(2 * box.holedist, t))),
+        (side2, Placement((0, 0, 0), Y, Z, -1)),
+        (bottom, Placement((0, 0, 0), X, Y, -1)),
+        (lid, Placement((0, 0, h), X, Y, -1, decoration="lid")),
+    ]
+    for c, U, V in [((0, 0), (-1, 0, 0), Y), ((x, 0), (0, -1, 0), (-1, 0, 0)),
+                    ((x, y), X, (0, -1, 0)), ((0, y), Y, X)]:
+        origin = _add((c[0], c[1], h - t), U, -tr)
+        out.append((triangles, Placement(origin, U, V, 1, keep=lambda q: q.contains(first))))
+    return out
+
+
+@recipe
+def ElectronicsBox(box, parts):
+    """Walls round x × y × h (render() adds the lid's 2 t to h), the bottom — with outside mounts a
+    plate flanged left and right, its wall starting holedist + t in from the drawn corner — and the
+    lid flush with the top, screwed to four corner triangles just under it, as in Rack19Box."""
+    t, x, y, h, tr, hd = box.thickness, box.x, box.y, box.h, box.triangle, box.holedist
+    front, left, right, back, bottom, top, triangles = parts[:7]
+    first = Point(tr - 2, 2)
+    out = [
+        (front, Placement((0, 0, 0), X, Z, 1)),
+        (left, Placement((0, 0, 0), Y, Z, -1)),
+        (right, Placement((x, 0, 0), Y, Z, 1)),
+        (back, Placement((0, y, 0), X, Z, -1)),
+        (bottom, Placement((0, 0, 0), X, Y, -1),
+         ~(bottom.record.matrix * Affine.translation(hd + t, t)) if box.outsidemounts else local_matrix(bottom.record)),
+        (top, Placement((0, 0, h), X, Y, -1, decoration="lid")),
+    ]
+    for c, U, V in [((0, 0), (-1, 0, 0), Y), ((x, 0), (0, -1, 0), (-1, 0, 0)),
+                    ((x, y), X, (0, -1, 0)), ((0, y), Y, X)]:
+        out.append((triangles, Placement(_add((c[0], c[1], h - t), U, -tr), U, V, 1, keep=lambda q: q.contains(first))))
+    return out
+
+
+@recipe
+def RegularStarBox(box, parts):
+    """Two halves, each a polygon plate (its first side from the drawn start, the inner face t in)
+    with a wall on every side (u along the side seen from outside, the inner face on the polygon).
+    The lid half is turned over, its plate's inner face h up, and turned 180/n against the bottom
+    half, so the walls' slots cross half-lapped and the walls' high ends make the star's points."""
+    t, n, h = box.thickness, box.n, box.h
+    s, sh = parts[2].record.args[0], box.sh
+    phi = math.pi / n if n % 2 == 0 else 0.0  # turning over already turns an odd polygon by 180/n
+    c, sn = math.cos(phi), math.sin(phi)
+
+    def place(half, origin, U, V, side):
+        if half:  # half a turn about X, up by h, then phi about Z
+            f = lambda v, dz=0.0: (c * v[0] + sn * v[1], sn * v[0] - c * v[1], dz - v[2])
+            origin, U, V = f(origin, h), f(U), f(V)
+        return Placement(origin, U, V, side, decoration="lid" if half else None)
+
+    out = []
+    for half in (0, 1):
+        plate = parts[half]
+        out.append((plate, place(half, (-s / 2, -sh, 0), X, Y, -1), ~(plate.record.matrix * Affine.translation(0, t))))
+        corner = (-s / 2, -sh, 0)
+        for i, w in enumerate(parts[2 + half * n:2 + (half + 1) * n]):
+            d = (math.cos(2 * math.pi * i / n), math.sin(2 * math.pi * i / n), 0)
+            out.append((w, place(half, corner, d, Z, 1)))
+            corner = _add(corner, d, s)
+    return out
+
+
+@recipe
+def SideHingeBox(box, parts):
+    """Inner tray x × yi × hi (bottom, full side D at X = x, low side B at X = 0, hinge sides A at
+    Y = 0 and C at Y = yi) in the shell that opens: the lid (the decoration), outer hinge sides p out
+    from the inner ones and outer side B over inner B, a small gap between them. The B sides and
+    the outer sides are drawn upside down. The hinge axis runs along Y at X = Z = hinge_center - t:
+    two pins (2 t along Y) set in the inner sides' slots turn in the outer sides' round holes. A
+    latch is a compartment against A (the second against C) by D, the switch behind the button
+    holes: a wall along Y, a square end wall, and the loose square plate laid on top at the end wall."""
+    t = box.thickness
+    p = box.play * t
+    hc = box.hinge_center or 2 * t + box.hinge_radius
+    walls = {q.record.label: q for q in parts if q.record.label}
+    x, hi = walls["inner - hinge side A"].record.args[:2]
+    yi = walls["inner - full side D"].record.args[0]
+    o, down = t + p, (0, 0, -1)  # the outer hinge sides' inner faces are o out
+    place = {
+        "inner - hinge side A": Placement((0, 0, 0), X, Z, 1),
+        "inner - full side D": Placement((x, 0, 0), Y, Z, 1),
+        "inner - hinge side C": Placement((x, yi, 0), (-1, 0, 0), Z, 1),
+        "outer - hinge side A": Placement((x, -o, hi), (-1, 0, 0), down, 1),
+        "outer - small side B": Placement((0, -o, hi), Y, down, 1),
+        "inner - small side B": Placement((0, 0, 2 * hc - t), Y, down, 1),
+        "outer - hinge side C": Placement((0, yi + o, hi), X, down, 1),
+        "inner - bottom": Placement((0, 0, 0), X, Y, -1),  # drawn as seen from inside (the latch holes)
+        "outer - upper lid": Placement((0, -o, hi), X, Y, 1, decoration="lid"),
+    }
+    out = [(q, place[q.record.label]) for q in parts if q.record.label in place]
+    rest = [q for q in parts if not q.record.label]
+    out += [(rest[0], Placement((hc - t / 2, 0, hc - 1.75 * t), (0, -1, 0), Z, 1)),
+            (rest[1], Placement((hc - 1.5 * t, yi, hc - 1.75 * t), Y, Z, 1))]
+    w, l = box.mx_width, box.mx_length
+    for i in range(box.cherrymx_latches):
+        y0, s = (0, 1) if i == 0 else (yi, -1)   # the hinge side it is against, into the box
+        cap, end, wall = rest[2 + 3 * i:5 + 3 * i]
+        out += [(cap, Placement((x - w, min(y0 + s * (l + t), y0 + s * (l + t - w)), w), X, Y, 1)),
+                (end, Placement((x - w, y0 + s * l, 0), X, Z, -s)),
+                (wall, Placement((x - w, y0 + s * l, 0), (0, -s, 0), Z, s))]  # its f end in the hinge side
+    return out
+
+
+@recipe
+def HingeBox(box, parts):
+    """Box x × y × h (front at y = 0), the lid hl high closed on the rim; with splitlid two lid
+    halves, s deep at the front and y - s at the back, open (e) where they meet. Cabinet hinges along
+    X on the back (and the front) wall: each eye piece stands across the wall in a slot of the hinge
+    edge, its tab through the hole under it, the box's in the even slots and the lid's in the odd
+    ones, all on one axis on the rim at the wall's outer face (style outside: ax beyond it). The
+    lid's hinged walls go in turned over so their slots run the way the box wall's do (it matters
+    for an even eyes_per_hinge). A piece is drawn with its eye at (0, e), +x out of the box."""
+    t = box.thickness
+    hs = box.edges["u"].settings
+    e, p, sp, n = hs.eye, hs.play, hs.spacing, hs.eyes_per_hinge
+    x, h = parts[0].record.args[:2]
+    y = parts[1].record.args[0]
+    hl = parts[4].record.args[1]
+    lid = dict(decoration="lid")
+    out = [(parts[0], Placement((0, 0, 0), X, Z, 1)),
+           (parts[1], Placement((x, 0, 0), Y, Z, 1)),
+           (parts[2], Placement((0, y, 0), (0, -1, 0), Z, 1)),
+           (parts[3], Placement((x, y, 0), (-1, 0, 0), Z, 1)),
+           (parts[4], Placement((0, y, h), X, Z, -1, **lid))]   # lid back, turned over
+    # the hinge edges, top edges of the box walls: along the edge → world X, outer face, outwards
+    axes = [(lambda d: d, y + t, 1)]
+    if parts[0].record.args[2] == "FFuF":   # split lid
+        s = parts[5].record.args[0]
+        out += [(parts[5], Placement((x, 0, h), Y, Z, 1, **lid)),            # right, front half
+                (parts[6], Placement((x, s, h), Y, Z, 1, **lid)),            # right, back half
+                (parts[7], Placement((0, y, h), (0, -1, 0), Z, 1, **lid)),   # left, back half
+                (parts[8], Placement((0, s, h), (0, -1, 0), Z, 1, **lid)),   # left, front half
+                (parts[9], Placement((x, 0, h), (-1, 0, 0), Z, -1, **lid)),  # lid front, turned over
+                (parts[10], Placement((0, 0, 0), X, Y, -1)),
+                (parts[11], Placement((0, 0, h + hl), X, Y, 1, **lid)),      # tops: x × s, x × (y - s)
+                (parts[12], Placement((0, s, h + hl), X, Y, 1, **lid))]
+        hinges = parts[13:]
+        axes.append((lambda d: x - d, -t, -1))
+    else:
+        out += [(parts[5], Placement((x, 0, h), Y, Z, 1, **lid)),
+                (parts[6], Placement((0, y, h), (0, -1, 0), Z, 1, **lid)),
+                (parts[7], Placement((0, 0, h), X, Z, 1, **lid)),
+                (parts[8], Placement((0, 0, 0), X, Y, -1)),
+                (parts[9], Placement((0, 0, h + hl), X, Y, 1, **lid))]
+        hinges = parts[10:]
+
+    frames = []  # (part, its local frame → the piece's own) for each eye piece
+    for part in hinges:
+        local = local_matrix(part.record)
+        for q in polygons_of(loops_of(part, local)):
+            if q.interiors:
+                c = Polygon(q.interiors[0]).centroid
+                _, miny, _, maxy = q.bounds
+                turn = Affine.scale(1 if maxy - c.y > c.y - miny else -1)   # drawn upright or turned
+                frames.append((part, Affine.translation(0, e) * turn * Affine.translation(-c.x, -c.y) * local))
+    width = (t + p) * n + p + 2 * sp
+    hn = min(hs.hinges, int(x // width))
+    starts = [(x - width) / 2] if hn == 1 else [j * (width + (x - hn * width) / (hn - 1)) for j in range(hn)]
+    beyond = max(t / 2, e - t) if hs.style == "outside" else 0.0
+    eye = lambda q: any(Polygon(r).contains(Point(0, e)) for r in q.interiors)
+    for along, face, out_y in axes:
+        for start in starts:
+            for i in range(n):
+                if not frames:
+                    break
+                V = (0, 0, -1) if i % 2 == 0 else Z         # the box's eyes hang down, the lid's up
+                axis = (along(start + sp + p + i * (t + p) + t / 2), face + out_y * beyond, h)
+                U = (0, out_y, 0)
+                origin = _add(_add(axis, V, -e), _cross(U, V), -t / 2)
+                part, local = frames.pop(0)
+                out.append((part, Placement(origin, U, V, 1, keep=eye, decoration=None if i % 2 == 0 else "lid"), local))
+    return out
+
+
+def _hinge_disc(part, centre, r):
+    """A chest hinge's disc: the cut round the side's ring is also the outline of the disc turning in
+    it, with the slot for the lid's pin (polygons_of drops it as scrap). Its cuts as a part of its own,
+    given the axis in the side's local frame."""
+    inverse = local_matrix(part.record)
+    inside = [path for path in part.pathes
+              if all(math.dist(inverse * (c[1], c[2]), centre) < r for c in path.path if c[0] in "MLC")]
+    return SimpleNamespace(record=part.record, pathes=inside)
+
+
+@recipe
+def IntegratedHingeBox(box, parts):
+    """Box x × y × h (front at y = 0) with a chest hinge: its axis runs along X at the rim, t behind
+    the back wall, through the discs turning in the rings at the back of the sides (O on the left, o
+    on the right, drawn as seen from outside). The lid, closed, goes from the rim up hl: its sides
+    (p, P) are cut round the rings and the pins of its back wall (q) sit in the discs' slots. The
+    lid's front and back are drawn from the lid top down to the rim."""
+    t = box.thickness
+    r = box.edges["O"].startWidth()            # the ring's outer radius
+    hy2 = box.edges["P"].startWidth()          # the lid sides' base line above the rim
+    y, x = parts[8].record.args[:2]
+    h = parts[4].record.args[1]
+    hl = parts[6].record.args[1]
+    top = h + hl                               # the lid top's inner face
+    lid = dict(decoration="lid")
+    left, right = Placement((0, y, 0), (0, -1, 0), Z, 1), Placement((x, 0, 0), Y, Z, 1)
+    places = [
+        left,                                                 # O
+        Placement((0, y, h + hy2), (0, -1, 0), Z, 1, **lid),  # lid left, p
+        right,                                                # o
+        Placement((x, 0, h + hy2), Y, Z, 1, **lid),           # lid right, P
+        Placement((0, 0, 0), X, Z, 1),                        # front
+        Placement((x, y, 0), (-1, 0, 0), Z, 1),               # back
+        Placement((0, 0, top), X, (0, 0, -1), -1, **lid),     # lid front
+        Placement((0, y, top), X, (0, 0, -1), 1, **lid),      # lid back, q
+        Placement((0, 0, 0), Y, X, 1),                        # bottom (y × x)
+        Placement((0, 0, top), Y, X, -1, **lid),              # lid top
+    ]
+    out = list(zip(parts, places))
+    out += [(_hinge_disc(parts[0], (-t, h), r), left), (_hinge_disc(parts[2], (y + t, h), r), right)]
+    return out
+
+
+@recipe
+def DiceBox(box, parts):
+    """IntegratedHingeBox's chest hinge, with finger joints, on a box whose walls hold a plate with
+    the dice holes flush with their top (h … h + t), and a lid on a second plate on top of it. The
+    axis runs along X at the top of the box's plate (the rim), t behind the back wall. Drawn upside
+    down: the back wall, the left side (O) and the lid's back and left side (p), from the box's or
+    the lid's plate or top."""
+    t = box.thickness
+    r, hy2 = box.edges["O"].startWidth(), box.edges["P"].startWidth()
+    x, y = parts[0].record.args[:2]
+    h = parts[2].record.args[1]
+    hl = parts[4].record.args[1]
+    rim, top = h + t, h + 2 * t + hl          # top: the lid top's inner face
+    lid = dict(decoration="lid")
+    left, right = Placement((0, 0, rim - r), Y, (0, 0, -1), 1), Placement((x, 0, 0), Y, Z, 1)
+    places = [
+        Placement((0, 0, h), X, Y, 1),                          # the box's dice plate
+        Placement((0, 0, rim), X, Y, 1, **lid),                 # the lid's dice plate
+        Placement((0, 0, 0), X, Z, 1),                          # front
+        Placement((0, y, h), X, (0, 0, -1), 1),                 # back
+        Placement((0, 0, rim + t), X, Z, 1, **lid),             # lid front
+        Placement((0, y, top), X, (0, 0, -1), 1, **lid),        # lid back, q
+        Placement((0, 0, 0), Y, X, 1),                          # bottom (y × x)
+        Placement((0, 0, top), Y, X, -1, **lid),                # lid top
+        Placement((0, 0, top), Y, (0, 0, -1), 1, **lid),        # lid left, p
+        left,                                                   # O
+        right,                                                  # o
+        Placement((x, 0, rim + hy2), Y, Z, 1, **lid),           # lid right, P
+    ]
+    out = list(zip(parts, places))
+    out += [(_hinge_disc(parts[9], (y + t, -r), r), left), (_hinge_disc(parts[10], (y + t, rim), r), right)]
+    return out
+
+
+# Each die's (top, front, right): 1, 2, 3 go anticlockwise round their corner, as on a real die.
+DIE_FACES = [(1, 2, 3), (6, 5, 3), (5, 4, 1), (3, 1, 2), (4, 6, 2), (2, 3, 1), (6, 2, 4)]
+PIPS = {1: [(0, 0)], 2: [(-1, -1), (1, 1)], 3: [(-1, -1), (0, 0), (1, 1)],
+        4: [(-1, -1), (-1, 1), (1, -1), (1, 1)], 5: [(-1, -1), (-1, 1), (0, 0), (1, -1), (1, 1)],
+        6: [(-1, -1), (-1, 0), (-1, 1), (1, -1), (1, 0), (1, 1)]}
+
+
+@decoration("DiceBox", "dice")
+def dice(box):
+    """A die on the bottom in each hole of the plate (centred as in diceCB, which counts from
+    self.x - 2t): 16 mm, smaller if the square that fits the hexagon or the closed box is, its
+    pips proud of the top, front and side faces."""
+    t = box.thickness
+    h, hl = box.h, box.lidheight
+    if box.outside:
+        h, hl = box.adjustSize(h), box.adjustSize(hl)
+    xi, yi = box.x - 2 * t, box.y - 2 * t
+    ap = (min(xi, yi) - 4 * t) / 6                        # the holes' apothem
+    a = min(16, 0.9 * 4 * ap / (1 + math.sqrt(3)), h + 2 * t + hl - 1)
+    if a <= 1:
+        return []
+    k = 0.08 * a
+    cube = rect(k, k, a - k, a - k).buffer(k, quad_segs=2)
+    centres = [(xi / 2, yi / 2)] + [(xi / 2 + (2 * ap + t) * math.cos(i * math.pi / 3),
+                                     yi / 2 + (2 * ap + t) * math.sin(i * math.pi / 3)) for i in range(6)]
+    out = []
+    for (cx, cy), (top, front, right) in zip(centres, DIE_FACES):
+        x0, y0 = cx - a / 2, cy - a / 2
+        out += Placement((x0, y0, 0), X, Y, 1).pieces([cube], a)
+        for place, n in [(Placement((x0, y0, a), X, Y, 1), top), (Placement((x0, y0, 0), X, Z, 1), front),
+                         (Placement((x0 + a, y0, 0), Y, Z, 1), right), (Placement((x0, y0, 0), Y, Z, -1), 7 - right)]:
+            pips = [Point(a / 2 + i * a / 4, a / 2 + j * a / 4).buffer(0.09 * a, quad_segs=3) for i, j in PIPS[n]]
+            out += [dict(p, decoration="pip") for p in place.pieces(pips, 0.3)]
+    return out
+
+
+def _walls_round(x, y, at=(0, 0, 0), up=1, **kw):
+    """Four walls round x × y from the corner at, inner faces inwards, thickness outward, as boxes.py
+    draws them going round as seen from outside: front (Y = 0), right, back, left. up = -1 turns
+    them upside down, local v running down from at."""
+    corners = [(0, 0), (x, 0), (x, y), (0, y)]
+    dirs = [X, Y, (-1, 0, 0), (0, -1, 0)]
+    out = []
+    for i, d in enumerate(dirs):
+        c = corners[i] if up > 0 else corners[(i + 1) % 4]
+        out.append(Placement(_add(at, (*c, 0)), d if up > 0 else tuple(-k for k in d), (0, 0, up), 1, **kw))
+    return out
+
+
+@recipe
+def TwoPiece(box, parts):
+    """Two open shells. The lower one stands on a base whose brim reaches out under the upper one;
+    the upper one, the lid (closed), is turned over it, play p clear of it all round: its walls on
+    the brim, or, when the lower walls are taller (hi > h), its top on them."""
+    t = box.thickness
+    o = box.play * t + t  # the upper shell's inner faces, out from the lower one's
+    x, hi = parts[0].record.args[:2]
+    y = parts[1].record.args[0]
+    h = parts[4].record.args[1]
+    top = max(h, hi)
+    return _walls_round(x, y) + _walls_round(x + 2 * o, y + 2 * o, (-o, -o, top), -1, decoration="lid") + [
+        Placement((0, 0, 0), X, Y, -1),
+        Placement((-o, -o, top), X, Y, 1, decoration="lid"),
+    ]
+
+
+@recipe
+def UnevenHeightBox(box, parts):
+    """Trapezoid walls round x × y, the corner heights counter-clockwise from the front left. The lid
+    (closed) lies flat at the highest corner + lid_height, its trapezoid walls hanging from it down
+    to the box's slanted top edges: drawn turned round, left, back, right, front, each from the
+    corner before it going round; none where both corners already reach the lid."""
+    walls, rest = parts[:4], parts[4:]
+    x, y = walls[0].record.args[0], walls[1].record.args[0]
+    hs = [w.record.args[1] for w in walls]
+    # trapezoidWall's cc() leaves the burn out of the base line: give the inner face explicitly
+    sw = box.edges[box.bottom_edge].startWidth()
+    out = [(w, p, ~(w.record.matrix * Affine.translation(0, sw))) for w, p in zip(walls, _walls_round(x, y))]
+    if box.bottom_edge != "e":
+        out.append((rest.pop(0), Placement((0, 0, 0), X, Y, -1)))
+    if box.add_lid:
+        maxh = max(hs)
+        top = maxh + box.lid_height
+        lh = [maxh - h + box.lid_height for h in hs]
+        out.append((rest.pop(0), Placement((0, 0, top), X, Y, 1, decoration="lid")))
+        hanging = _walls_round(x, y, (0, 0, top), -1, decoration="lid")
+        sw = box.edges["F"].startWidth()
+        for i in (3, 2, 1, 0):
+            if not (lh[i] == lh[(i + 1) % 4] == 0.0):
+                w = rest.pop(0)
+                out.append((w, hanging[i], ~(w.record.matrix * Affine.translation(0, sw))))
+    return out
+
+
+def _lid(box, parts, x, y, h):
+    """The lid style's parts (lids.Lid, drawn last: the lid, then its handle), closed on walls round
+    x × y with their top at h, as decorations "lid": (part, Placement) for the last parts. A handle
+    stands in its slot, its catch under the lid; flatbrim and flatfang lids have no slot for it."""
+    lid, t = box.lid, box.thickness
+    L = lambda o, U, V, side: Placement(o, U, V, side, decoration="lid")
+    seq, slot = [], None  # slot: centre on the lid's inner face, along the slot, out of the lid
+    if lid.style == "flat":  # the bottom fits between the walls, the top lies on them
+        bs = lid.brim_spacing
+        seq = [L((bs, bs, h), X, Y, -1), L((0, 0, h), X, Y, 1)]
+        slot = ((x / 2, y / 2, h - t), X, Z)
+    elif lid.style == "flatbrim":  # strips hanging inside the walls from the top's finger holes
+        bs = lid.brim_spacing
+        down = (0, 0, -1)
+        seq = [L((0, 0, h), X, Y, 1), L((bs, bs, h), X, down, 1), L((bs, y - bs, h), X, down, -1),
+               L((bs, bs + t, h), Y, down, -1), L((x - bs, bs + t, h), Y, down, 1)]
+    elif lid.style == "flatfang":  # a fang through each corner hole, hanging inside the walls
+        bs, f, z = lid.brim_spacing, lid.fang_size, h - lid.brim_height
+        seq = [L((0, 0, h), X, Y, 1), L((bs, bs, z), Y, Z, 1), L((x - bs - f, bs, z), X, Z, -1),
+               L((bs, y - bs - t, z), X, Z, -1), L((x - bs - t, y - bs - f, z), Y, Z, 1)]
+    elif lid.style == "chest":  # ends over the front and back walls, the top bent round them
+        r = lid.getChestR(x)
+        # chestTop passes its cc() y as x: its local v = 0 is its drawn edge, t out from the inner face
+        seq = [L((-t, 0, h), X, Z, 1), L((-t, y, h), X, Z, -1),
+               Placement((0, -t, h), Z, Y, 1, bends=[(3 * t, 3 * t + math.pi * r, 180, r)], decoration="lid")]
+        slot = ((x, x / 2 - t, h + 1.5 * t), Y, X)  # in the top's last straight 3t, at X = x
+    elif lid.style in ("overthetop", "ontop"):  # a top with walls round it, hanging down
+        H = lid.height
+        if lid.style == "overthetop":  # round the box's walls, the top lying on them
+            o, z = -t - lid.play / 2, h
+            seq = [L((o, o, z), X, Y, 1)]
+        else:  # on the box's walls, with a tab inside each in the middle
+            o, z = 0, h + H
+            seq = [L((0, 0, z), X, Y, 1)]
+        ring = _walls_round(x - 2 * o, y - 2 * o, (o, o, z - H), decoration="lid")
+        seq += [ring[0], ring[2], ring[3], ring[1]]  # front, back, left, right
+        if lid.style == "ontop":
+            b = h - 2 * t
+            seq += [L((x / 2 - t, 0, b), X, Z, -1), L((x / 2 - t, y, b), X, Z, 1),
+                    L((0, y / 2 - t, b), Y, Z, 1), L((x, y / 2 - t, b), Y, Z, -1)]
+        slot = ((x / 2, y / 2, z), X, Z)
+    seq = [[q] for q in seq]
+    if seq and lid.handle != "none":
+        seq.append([])
+        if slot:
+            c, A, N = slot
+            P = lambda d, U, V, keep=None: Placement(tuple(c[i] + sum(k * w[i] for k, w in d) for i in range(3)),
+                                                     U, V, 1, keep=keep, decoration="lid")
+            perp = _cross(A, N)
+            if lid.handle.startswith("long"):  # its catch x/2 + 2t across
+                seq[-1] = [P([(-x / 4 - t, A), (-t, N), (-t / 2, perp)], A, N)]
+            else:  # a knob: two 8t pieces half-lapped across each other
+                handle = parts[-1]
+                b0 = min(q.bounds[0] for q in polygons_of(loops_of(handle, local_matrix(handle.record)))
+                         if q.bounds[0] > 4 * t) + box.burn
+                seq[-1] = [P([(-4 * t, A), (-t, N), (-t / 2, perp)], A, N, lambda q: q.bounds[0] < 4 * t),
+                           P([(-b0 - 4 * t, perp), (-t, N), (t / 2, A)], perp, N, lambda q: q.bounds[0] > 4 * t)]
+    return [(p, q) for p, qs in zip(parts[len(parts) - len(seq):], seq) for q in qs]
+
+
+@recipe
+def BasedBox(box, parts):
+    """Walls round x × y standing in the finger holes of a base plate with a brim. The generator
+    draws "front" and "back" along y, "left" and "right" along x: as seen from -X, front at X = 0
+    and right at Y = 0 (the asymmetric top edges don't match their lid either way). drawLid's part
+    closes the walls at h: a fixed "top", or a lid (two plates for E: one in the walls' outset, one
+    on it; k: two halves, the right one drawn mirrored; v: the cabinet hinges are left out); then
+    the lid style's parts."""
+    t, e = box.thickness, box.top_edge
+    walls = {p.record.label: p for p in parts}
+    x, (y, h) = walls["left"].record.args[0], walls["front"].record.args[:2]
+    ring = _walls_round(x, y)
+    out = [(walls["right"], ring[0]), (walls["back"], ring[1]), (walls["left"], ring[2]),
+           (walls["front"], ring[3]), (walls["base"], Placement((0, 0, 0), X, Y, -1))]
+    lid = lambda z, at=0, U=X, side=1: Placement((at, 0, z), U, Y, side, decoration="lid")
+    if e in "cfFhŠY":
+        tops = [Placement((0, 0, h), X, Y, 1)]
+    elif e in "iLv":
+        tops = [lid(h)]
+    else:
+        tops = {"E": [lid(h + t), lid(h)], "k": [lid(h), lid(h, x, (-1, 0, 0), -1)]}.get(e, [])
+    others = [p for p in parts if p.record.label not in ("front", "back", "left", "right", "base")]
+    return out + list(zip(others, tops)) + _lid(box, others[len(tops):], x, y, h)
 
 
 @recipe
