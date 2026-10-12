@@ -27,6 +27,7 @@ struct EditorView: View {
     @State private var materialID = SheetMaterial.standard.id  // every box opens in MDF
     @AppStorage("showsDecorations") private var showsDecorations = true
     @AppStorage("showsLids") private var showsLids = true
+    @State private var exploded = false
 
     var body: some View {
         preview
@@ -70,7 +71,8 @@ struct EditorView: View {
             Group {
                 if let assembly = model.assembly {
                     AssemblyView(assembly: assembly, key: model.assemblyKey,
-                                 material: SheetMaterial.named(materialID), decorations: showsDecorations, lids: showsLids)
+                                 material: SheetMaterial.named(materialID), decorations: showsDecorations, lids: showsLids,
+                                 exploded: exploded)
                 } else if let error = model.assemblyError {
                     ContentUnavailableView("No 3D View for This Box", systemImage: "cube.transparent", description: Text(error))
                 } else {
@@ -125,6 +127,13 @@ struct EditorView: View {
                     }
                     .toggleStyle(.button)
                     .help("Show or hide the lids")
+                }
+                if (model.assembly.map { Set($0.pieces.compactMap(\.part)).count } ?? 0) > 1 {
+                    Toggle(isOn: $exploded) {
+                        Label("Exploded View", systemImage: "arrow.up.left.and.arrow.down.right")
+                    }
+                    .toggleStyle(.button)
+                    .help("Pull the parts apart to show how they go together")
                 }
                 Picker("Material", selection: $materialID) {
                     ForEach(SheetMaterial.Kind.allCases) { kind in
@@ -365,6 +374,7 @@ struct AssemblyView: NSViewRepresentable {
     var material = SheetMaterial.standard
     var decorations = true
     var lids = true
+    var exploded = false
     var interactive = true
     var yaw: CGFloat = 0
     var pitch: CGFloat = 0
@@ -395,6 +405,7 @@ struct AssemblyView: NSViewRepresentable {
             }
         }
         stage.show(decorations: decorations, lids: lids)
+        if stage.exploded != exploded { stage.explode(exploded, animated: true) }
         stage.spin.eulerAngles = SCNVector3(pitch, yaw, 0)
     }
 
@@ -431,6 +442,8 @@ struct StageView: NSViewRepresentable {
 final class AssemblyStage {
     var key = ""
     var optional: [(node: SCNNode, piece: Piece)] = []  // lids and decorations, shown or hidden
+    var moving: [(node: SCNNode, home: SCNVector3, away: SCNVector3?, opacity: CGFloat)] = []  // see explode
+    var exploded = false
     var size: CGFloat = 0
     var turn: CGFloat = 0   // the gallery's yaw for this box
     let scene = SCNScene()
@@ -478,19 +491,92 @@ final class AssemblyStage {
         spin.childNodes.forEach { $0.removeFromParentNode() }
         optional = []
         let box = SCNNode()
+        var built: [(SCNNode, Piece)] = []
         for piece in assembly.pieces where all || Self.shown(piece, decorations: decorations, lids: lids) {
             let node = Self.node(for: piece, material: material)
             box.addChildNode(node)
+            built.append((node, piece))
             if piece.lid == true || piece.decoration != nil { optional.append((node, piece)) }
         }
         let (minV, maxV) = box.boundingBox
+        let dx = maxV.x - minV.x, dy = maxV.y - minV.y, dz = maxV.z - minV.z
+        let size = sqrt(dx * dx + dy * dy + dz * dz)
+        let away = Self.explosion(built.map(\.1), centre: SCNVector3((minV.x + maxV.x) / 2, (minV.y + maxV.y) / 2, (minV.z + maxV.z) / 2),
+                                  size: size)
+        moving = built.map { node, piece in (node, node.position, piece.part.flatMap { away[$0] }, node.opacity) }
+        place()
         box.position = SCNVector3(-(minV.x + maxV.x) / 2, -(minV.y + maxV.y) / 2, -(minV.z + maxV.z) / 2)
         let tilt = SCNNode()           // boxes.py is z-up, SceneKit y-up
         tilt.eulerAngles.x = -.pi / 2
         tilt.addChildNode(box)
         spin.addChildNode(tilt)
-        let dx = maxV.x - minV.x, dy = maxV.y - minV.y, dz = maxV.z - minV.z
-        return sqrt(dx * dx + dy * dy + dz * dz)
+        return size
+    }
+
+    /// How far the exploded view pulls the parts out: a share of their distance from the box's centre,
+    /// plus a share of the box's size so that parts near the middle come off too; and how much the
+    /// camera zooms out for it.
+    static let spread: CGFloat = 0.6
+    static let gap: CGFloat = 0.08
+    static let zoom: CGFloat = 1.5
+
+    /// Each part's way out of the box in the exploded view: a flat part along its normal, by its
+    /// distance from the centre that way (a divider through the middle stays, the walls round it go
+    /// out, the floor down, the lid up); a bent one (its pieces facing different ways) straight away
+    /// from the centre. Decorations not cut from the sheet have no part: they fade out instead.
+    static func explosion(_ pieces: [Piece], centre: SCNVector3, size: CGFloat) -> [Int: SCNVector3] {
+        func vec(_ a: [Double]) -> SCNVector3 { SCNVector3(a[0], a[1], a[2]) }
+        func dot(_ a: SCNVector3, _ b: SCNVector3) -> CGFloat { a.x * b.x + a.y * b.y + a.z * b.z }
+        var parts: [Int: (normal: SCNVector3, flat: Bool, sum: SCNVector3, count: CGFloat)] = [:]
+        for piece in pieces {
+            guard let part = piece.part, let ring = piece.rings.first, !ring.isEmpty else { continue }
+            let u = vec(piece.u), v = vec(piece.v), s = CGFloat(piece.side)
+            let n = SCNVector3(s * (u.y * v.z - u.z * v.y), s * (u.z * v.x - u.x * v.z), s * (u.x * v.y - u.y * v.x))
+            let cu = ring.reduce(0) { $0 + $1[0] } / Double(ring.count), cv = ring.reduce(0) { $0 + $1[1] } / Double(ring.count)
+            let o = vec(piece.origin), half = CGFloat(piece.t) / 2
+            let c = SCNVector3(o.x + CGFloat(cu) * u.x + CGFloat(cv) * v.x + half * n.x,
+                               o.y + CGFloat(cu) * u.y + CGFloat(cv) * v.y + half * n.y,
+                               o.z + CGFloat(cu) * u.z + CGFloat(cv) * v.z + half * n.z)
+            if var p = parts[part] {
+                p.flat = p.flat && abs(dot(p.normal, n)) > 0.999
+                p.sum = SCNVector3(p.sum.x + c.x, p.sum.y + c.y, p.sum.z + c.z)
+                p.count += 1
+                parts[part] = p
+            } else {
+                parts[part] = (n, true, c, 1)
+            }
+        }
+        return parts.mapValues { p in
+            let d = SCNVector3(p.sum.x / p.count - centre.x, p.sum.y / p.count - centre.y, p.sum.z / p.count - centre.z)
+            let w = p.flat ? p.normal : d
+            let along = p.flat ? dot(p.normal, d) : sqrt(dot(d, d))   // the distance out, along w
+            let k = abs(along) < 0.01 * size ? 0 : (abs(along) * spread + gap * size) / abs(along) * (p.flat ? along : 1)
+            return SCNVector3(w.x * k, w.y * k, w.z * k)
+        }
+    }
+
+    /// Pulls the parts apart (or puts them back), animated: decorations fade, the camera zooms out.
+    func explode(_ on: Bool, animated: Bool) {
+        exploded = on
+        SCNTransaction.begin()
+        SCNTransaction.animationDuration = animated ? 0.8 : 0
+        SCNTransaction.animationTimingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        place()
+        if let cam = camera.camera {
+            cam.orthographicScale *= Double(on ? Self.zoom : 1 / Self.zoom)
+            sun.light?.orthographicScale *= on ? Self.zoom : 1 / Self.zoom
+        }
+        SCNTransaction.commit()
+    }
+
+    private func place() {
+        for (node, home, away, opacity) in moving {
+            if let away {
+                node.position = exploded ? SCNVector3(home.x + away.x, home.y + away.y, home.z + away.z) : home
+            } else {
+                node.opacity = exploded ? 0 : opacity
+            }
+        }
     }
 
     func show(decorations: Bool, lids: Bool) {
@@ -508,8 +594,9 @@ final class AssemblyStage {
         camera.look(at: SCNVector3Zero)
         cam.zFar = Double(size) * 20
         cam.screenSpaceAmbientOcclusionRadius = Double(size) * 0.05
+        if exploded { cam.orthographicScale *= Double(Self.zoom) }
         let light = sun.light!
-        light.orthographicScale = Double(size) * 1.2
+        light.orthographicScale = Double(size) * 1.2 * (exploded ? Self.zoom : 1)
         light.zNear = 1; light.zFar = Double(size) * 8   // the shadow map must reach the whole box
         sun.position = SCNVector3(size * 0.9, size * 2.2, size * 1.4)
         sun.look(at: SCNVector3Zero)

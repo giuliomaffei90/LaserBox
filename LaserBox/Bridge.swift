@@ -42,6 +42,7 @@ struct Piece: Codable {
     let origin, u, v: [Double]
     let side: Int
     let t: Double
+    var part: Int?    // the placed part it was cut from, shared by its pieces; none for decorations not cut
     var decoration: String?
     var lid: Bool?
     var clear: Bool?  // always clear acrylic, whatever the material (a display case's glass)

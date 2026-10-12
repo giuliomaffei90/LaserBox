@@ -6,8 +6,10 @@ recipe per generator says where each part goes. Flexed regions are bent by slici
 narrow strips that follow an arc.
 
 Protocol: assemble(name, args) -> {"pieces": [{"rings": [[[u, v], …], …], "origin": [x, y, z],
-"u": [..], "v": [..], "side": ±1, "t": thickness[, "decoration": kind][, "lid": true][, "clear": true]}, …], "turn": degrees,
-"galleryLids": bool}  — world(u, v, w) = origin + u·U + v·V + w·side·(U×V)
+"u": [..], "v": [..], "side": ±1, "t": thickness[, "part": n][, "decoration": kind][, "lid": true][, "clear": true]}, …],
+"turn": degrees, "galleryLids": bool}  — world(u, v, w) = origin + u·U + v·V + w·side·(U×V). Pieces cut from
+the same placed part share its "part" (the exploded view moves them together); decorations that are
+not cut (notes, dice…) have none.
 """
 import math
 from types import SimpleNamespace
@@ -3267,7 +3269,7 @@ def assemble(box):
         items = placed
     else:
         items = list(zip(parts, placed))
-    for item in items:
+    for n, item in enumerate(items):
         part, placement = item[0], item[1]
         if placement is None:
             continue
@@ -3275,7 +3277,7 @@ def assemble(box):
         matrix = local if local is not None else local_matrix(part.record)
         cuts = []
         polys = polygons_of(loops_of(part, matrix, cuts), cuts)
-        pieces += placement.pieces(polys, box.thickness)
+        pieces += [dict(p, part=n) for p in placement.pieces(polys, box.thickness)]
     pieces += DECORATIONS.get(type(box).__name__, lambda b: [])(box)
     name = type(box).__name__
     return {"pieces": pieces, "count": len(parts), "turn": TURN.get(name, 0), "galleryLids": name in GALLERY_LIDS}

@@ -241,6 +241,16 @@
         }
       }
     },
+    "Exploded View": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esploso"
+          }
+        }
+      }
+    },
     "Export": {
       "localizations": {
         "it": {
@@ -417,6 +427,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Preparo le anteprime 3D… %1$lld di %2$lld"
+          }
+        }
+      }
+    },
+    "Pull the parts apart to show how they go together": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Separa i pezzi per mostrare come si montano"
           }
         }
       }
