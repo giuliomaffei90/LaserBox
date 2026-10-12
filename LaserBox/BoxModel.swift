@@ -1,4 +1,5 @@
 import AppKit
+import CryptoKit
 import Observation
 
 @Observable @MainActor
@@ -62,21 +63,26 @@ final class BoxModel {
     }
 
     func loadGalleryAssembly(_ name: String) async {
-        guard let bridge, galleryAssemblies[name] == nil else { return }
+        guard let bridge, galleryAssemblies[name] == nil, !Task.isCancelled else { return }
         if let assembly = try? await bridge.assemble(name, args: [:]) {
             galleryAssemblies[name] = assembly
         }
     }
 
+    /// A card's picture, from disk or rendered. A card scrolled away (its task cancelled) gives up its
+    /// turn, so the ones on screen don't wait behind all those scrolled past.
     func loadGalleryPicture(_ name: String) async {
         guard galleryPictures[name] == nil else { return }
         if let picture = await GalleryPictures.shared.cached(name) {
             galleryPictures[name] = picture
             return
         }
+        guard !Task.isCancelled else { return }
         await loadGalleryAssembly(name)
-        guard let assembly = galleryAssemblies[name] else { return }
-        galleryPictures[name] = await GalleryPictures.shared.render(name, assembly)
+        guard !Task.isCancelled, let assembly = galleryAssemblies[name] else { return }
+        if let picture = await GalleryPictures.shared.render(name, assembly) {
+            galleryPictures[name] = picture
+        }
     }
 
     /// The cut file in the given format ("svg" or "dxf") for the current settings.
@@ -132,19 +138,26 @@ final class BoxModel {
 }
 
 
-/// The gallery's 3D cards as pictures, rendered one at a time off the main thread and kept on disk
-/// for this build of the app: a live SceneKit view per card made scrolling stutter. A card turns
-/// live only while the pointer is on it.
+/// The gallery's 3D cards as pictures, rendered one at a time off the main thread and kept on disk:
+/// a live SceneKit view per card made scrolling stutter. A card turns live only while it's turned.
 actor GalleryPictures {
     static let shared = GalleryPictures()
+    /// Bump when the pictures' look changes (lights, materials, framing).
+    private static let look = 1
     private let folder: URL
 
     init() {
         let root = URL.cachesDirectory.appending(path: Bundle.main.bundleIdentifier ?? "LaserBox").appending(path: "Gallery")
-        // Another build may draw any box differently: its pictures go in a folder of their own.
-        let built = (try? Bundle.main.executableURL?.resourceValues(forKeys: [.contentModificationDateKey]))?
-            .contentModificationDate ?? .distantPast
-        let stamp = String(Int(built.timeIntervalSince1970))
+        // The pictures hold as long as the boxes come out the same: the assembly code, the app's
+        // defaults and the look. Other pictures go.
+        var hash = SHA256()
+        for file in ["assembly.py", "bridge.py"] {
+            if let url = Bundle.main.url(forResource: file, withExtension: nil), let data = try? Data(contentsOf: url) {
+                hash.update(data: data)
+            }
+        }
+        hash.update(data: Data("\(Self.look)".utf8))
+        let stamp = hash.finalize().prefix(8).map { String(format: "%02x", $0) }.joined()
         folder = root.appending(path: stamp)
         let files = FileManager.default
         for old in (try? files.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? [] where old.lastPathComponent != stamp {
@@ -157,7 +170,8 @@ actor GalleryPictures {
         NSImage(contentsOf: file(name))
     }
 
-    func render(_ name: String, _ assembly: Assembly) -> NSImage {
+    func render(_ name: String, _ assembly: Assembly) -> NSImage? {
+        guard !Task.isCancelled else { return nil }   // its card was scrolled away while it waited
         let picture = AssemblyStage.galleryPicture(of: assembly, pixels: 640)
         if let tiff = picture.tiffRepresentation,
            let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
