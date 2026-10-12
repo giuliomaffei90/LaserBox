@@ -13030,3 +13030,8 @@ msgstr ""
 #: LaserBox/bridge.py
 msgid  "Pieces for trying out the laser settings"
 msgstr ""
+
+#. label put on a cut piece that has none, followed by its number ("part 3")
+#: LaserBox/bridge.py
+msgid  "part"
+msgstr ""

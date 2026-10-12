@@ -24,7 +24,12 @@ import markdown
 from boxes.generators.traylayout import TrayLayoutFile
 
 import assembly
+from types import SimpleNamespace
+
 from affine import Affine
+from shapely.affinity import affine_transform
+from shapely.geometry import LineString, Point, Polygon
+from shapely.ops import nearest_points, polylabel, unary_union
 from svgpathtools import Line, parse_path
 
 TRANSLATIONS = gettext.translation("boxes.py", os.path.join(os.path.dirname(os.path.abspath(__file__)), "locale"),
@@ -137,7 +142,10 @@ def render(name, args, fmt):
         box.open()
         box.render()
         box.ctx.stroke()  # the last path, before the parts move (close() would stroke it after)
-        pack(box.ctx._dwg.parts, box.spacing)
+        drawn = part_groups(box.ctx._dwg.parts)
+        add_labels(drawn, box)
+        pack(drawn, box.spacing)
+        upright_labels(box.ctx._dwg.parts)
     except Exception as e:
         raise ValueError(translate_error(str(e), box)) from e
     data = box.close()
@@ -182,18 +190,42 @@ def maxrects(sizes, width, gap):
 BED_WEIGHT = 0.3  # how much a sheet off the bed's shape costs, per e-fold of its aspect ratio
 
 
-def pack(parts, gap):
-    """Moves the drawn parts (each as a whole, maybe turned a quarter) closer together: their
-    bounding boxes packed `gap` apart (the generator's spacing) in the strip width, among some
-    tried, that gives the smallest sheet, shaped like a laser's bed (3:2, landscape): area weighed by
-    how far the shape is from it. Kept as drawn unless that scores better."""
+def part_groups(parts):
+    """The drawn parts that touch or overlap, together: a wall whose drawing a nested part interrupted
+    goes on in a part of its own, a ring is drawn in its plate's hole; they move as one."""
     parts = [p for p in parts if p.pathes]
     boxes_ = [p.extents() for p in parts]
-    if len(parts) < 2:
+    owner = list(range(len(parts)))
+
+    def root(i):
+        while owner[i] != i:
+            owner[i] = owner[owner[i]]
+            i = owner[i]
+        return i
+
+    for i, a in enumerate(boxes_):
+        for j in range(i):
+            b = boxes_[j]
+            if a.xmin <= b.xmax + 0.01 and b.xmin <= a.xmax + 0.01 and a.ymin <= b.ymax + 0.01 and b.ymin <= a.ymax + 0.01:
+                owner[root(i)] = root(j)
+    out = {}
+    for i, p in enumerate(parts):
+        out.setdefault(root(i), []).append(p)
+    return list(out.values())
+
+
+def pack(groups_, gap):
+    """Moves the groups of drawn parts (each as a whole, maybe turned a quarter) closer together:
+    their bounding boxes packed `gap` apart (the generator's spacing) in the strip width, among some
+    tried, that gives the smallest sheet, shaped like a laser's bed (3:2, landscape): area weighed by
+    how far the shape is from it. Kept as drawn unless that scores better."""
+    if len(groups_) < 2:
         return
+    boxes_ = [sum([p.extents() for p in g[1:]], g[0].extents()) for g in groups_]
     sizes = [(e.width, e.height) for e in boxes_]
     drawn = sum(boxes_[1:], boxes_[0])
     widest, total = max(max(s) for s in sizes), sum(min(s) + gap for s in sizes)
+
     def score(w, h):
         return w * h * (1 + BED_WEIGHT * abs(math.log(w / h / 1.5)))
 
@@ -208,10 +240,123 @@ def pack(parts, gap):
             best = (area, places)
     if best[1] is None:
         return
-    for p, e, (x, y, turned) in zip(parts, boxes_, best[1]):
+    for g, e, (x, y, turned) in zip(groups_, boxes_, best[1]):
         m = (Affine.translation(x + e.ymax, y - e.xmin) * Affine.rotation(90) if turned
              else Affine.translation(x - e.xmin, y - e.ymin))
-        p.transform(1.0, m)
+        for p in g:
+            p.transform(1.0, m)
+
+
+LABEL_SIZES = (4, 3, 2)  # mm: boxes.py's labels, then smaller; a piece too small for 2 gets none
+LABEL_MARGIN = 0.8       # mm from any cut
+
+
+def _text_box(m, text, fs, align):
+    """The outline a text takes: its matrix's local x along the line (by alignment), y up to fs."""
+    w = 0.6 * fs * len(text)
+    x0 = {"left": 0, "middle": -w / 2, "end": -w}[align]
+    return Polygon([m * (x, y) for x, y in ((x0, -0.15 * fs), (x0 + w, -0.15 * fs), (x0 + w, fs), (x0, fs))])
+
+
+def _label_spot(free, text, angle, sizes):
+    """(centre, angle, size) for a text centred in `free` (a piece shrunk by the margin) near the
+    point farthest from its cuts, at the first size and angle (the given one, then across) it fits."""
+    target = polylabel(max(getattr(free, "geoms", [free]), key=lambda g: g.area), tolerance=0.5)
+    for fs in sizes:
+        for a in (angle, angle + 90):
+            w, h = 0.6 * fs * len(text), 1.15 * fs
+            # turned and squeezed so the text's box is an h × h square: its centres lie at least
+            # h / √2 in from the edges (its circumcircle), then back
+            to = Affine.scale(h / w, 1) * Affine.rotation(-a)
+            valid = affine_transform(free, to.to_shapely()).buffer(-h / 2 ** 0.5)
+            if valid.is_empty:
+                continue
+            t = affine_transform(target, to.to_shapely())
+            c = t if valid.contains(t) else nearest_points(valid, t)[0]
+            centre = ~to * (c.x, c.y)
+            m = Affine.translation(*centre) * Affine.rotation(a) * Affine.translation(0, -fs / 2)
+            if _text_box(m, text, fs, "middle").within(free):
+                return m, fs
+    return None
+
+
+def add_labels(groups_, box):
+    """A label on every piece: boxes.py's (red text) kept where it lies clear of the cuts, moved to
+    a clear spot (smaller if need be) where it doesn't, and "part n" on the pieces without one;
+    none on a piece too small for it. Pieces are the outlines cut in black: what is cut in blue
+    (holes) falls out."""
+    if not box.labels:
+        return
+    n = 0
+    for g in groups_:
+        pathes = [p for part in g for p in part.pathes]
+        drawing = SimpleNamespace(pathes=pathes)
+        cuts = []
+        pieces = assembly.polygons_of(assembly.loops_of(drawing, Affine.identity(), cuts), cuts)
+        outer = unary_union([LineString(l + l[:1]) for l in assembly.loops_of(
+            SimpleNamespace(pathes=[p for p in pathes if assembly._is_black(p.params.get("rgb"))]), Affine.identity())])
+        pieces = [q for q in pieces if q.exterior.distance(outer) < 0.3 and
+                  outer.distance(q.exterior.interpolate(0.5, normalized=True)) < 0.3]
+        texts = [(c, p) for p in pathes for c in p.path
+                 if c[0] == "T" and c[5]["rgb"] == boxes.Color.ANNOTATIONS and c[4].strip()]
+        mine = {id(q): [] for q in pieces}
+        for c, p in texts:
+            centre = _text_box(c[3], c[4], c[5]["fs"], c[5].get("align", "left")).centroid
+            home = [q for q in pieces if Polygon(q.exterior).contains(centre)]
+            # beside its piece (on a slot, between two): the nearest one it would fit on, if near
+            near = [q for q in pieces if q.area > 4 * _text_box(Affine.identity(), c[4], LABEL_SIZES[-1], "left").area
+                    and q.distance(centre) < 20]
+            if home or near:
+                mine[id(min(home, key=lambda q: q.area) if home else min(near, key=lambda q: q.distance(centre)))].append(c)
+        new = []
+        # clear of the other texts too (etched values, labels already placed)
+        writing = {id(c): _text_box(c[3], c[4], c[5]["fs"], c[5].get("align", "left")).buffer(LABEL_MARGIN)
+                   for p in pathes for c in p.path if c[0] == "T" and c[4].strip()}
+
+        def clear(q, but=None):
+            return q.buffer(-LABEL_MARGIN).difference(unary_union([b for i, b in writing.items() if i != but]))
+
+        for q in sorted(pieces, key=lambda q: (-q.bounds[3], q.bounds[0])):  # top left first
+            if q.buffer(-LABEL_MARGIN).is_empty:
+                continue
+            for c in mine[id(q)]:
+                m, text, params = c[3], c[4], c[5]
+                free = clear(q, but=id(c))
+                if free.is_empty or _text_box(m, text, params["fs"], params.get("align", "left")).within(free):
+                    continue
+                spot = _label_spot(free, text, math.degrees(math.atan2(m.d, m.a)),
+                                   [params["fs"]] + [fs for fs in LABEL_SIZES if fs < params["fs"]])
+                c[3], c[4] = (spot[0], text) if spot else (m, "")  # no room: dropped
+                if spot:
+                    c[1], c[2] = spot[0].c, spot[0].f
+                    params.update(fs=spot[1], align="middle")
+                writing[id(c)] = _text_box(c[3], c[4], params["fs"], params.get("align", "left")).buffer(LABEL_MARGIN)
+            free = clear(q)
+            if not mine[id(q)] and not free.is_empty:
+                w, h = q.bounds[2] - q.bounds[0], q.bounds[3] - q.bounds[1]
+                text = f"{_('part')} {n + 1}"
+                if spot := _label_spot(free, text, 0 if w >= h else 90, LABEL_SIZES):
+                    n += 1
+                    m, fs = spot
+                    new.append(["T", m.c, m.f, m, text, {"ff": ("sans-serif", False, False), "fs": fs, "lw": 0,
+                                                         "rgb": boxes.Color.ANNOTATIONS, "align": "middle"}])
+                    writing[id(new[-1])] = _text_box(m, text, fs, "middle").buffer(LABEL_MARGIN)
+        for c in new:
+            g[-1].pathes.append(boxes.drawing.Path([c], dict(c[5])))
+
+
+def upright_labels(parts):
+    """Labels read left to right or bottom to top, however their part was turned: the others are
+    turned half round about their middle."""
+    for p in parts:
+        for path in p.pathes:
+            for c in path.path:
+                if c[0] == "T" and c[5]["rgb"] == boxes.Color.ANNOTATIONS:
+                    m = c[3]
+                    if not -89.5 < math.degrees(math.atan2(m.d, m.a)) < 90.5:
+                        mid = _text_box(m, c[4], c[5]["fs"], c[5].get("align", "left")).centroid
+                        c[3] = Affine.translation(mid.x, mid.y) * Affine.rotation(180) * Affine.translation(-mid.x, -mid.y) * m
+                        c[1], c[2] = c[3].c, c[3].f
 
 
 def translate_error(message, box):
