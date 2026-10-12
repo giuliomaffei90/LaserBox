@@ -991,8 +991,7 @@ def card_back(x0, y0, w, l):
 @decoration("CardBox", "cards")
 def card_decks(box):
     """A deck of poker cards (63.5 × 88.9, 54 cards ≈ 17 mm) lying in each compartment, smaller if
-    the compartment or the box is: white edges, and on top the first card's back (see card_back),
-    red and blue in turn."""
+    the compartment or the box is (see _deck), red and blue in turn."""
     t = box.thickness
     inlays = t if box.openingdirection == "right" else 0   # glued to the front and back
     depth = box.boxdepth - 2 * inlays
@@ -1000,15 +999,20 @@ def card_decks(box):
     out, pos = [], t
     for i, s in enumerate(box.sx):
         w, l = min(63.5, s - 0.5), min(88.9, depth - 0.5)
-        x0, y0 = pos + (s - w) / 2, inlays + (depth - l) / 2
-        deck = rect(x0 + 3, y0 + 3, x0 + w - 3, y0 + l - 3).buffer(3, quad_segs=4)
-        field, pattern = card_back(x0, y0, w, l)
-        back = ("cardback", "cardback-blue")[i % 2]
-        out += Placement((0, 0, 0), X, Y, 1).pieces([deck], high)
-        out += [dict(p, decoration=back) for p in Placement((0, 0, high), X, Y, 1).pieces([field], 0.08)]
-        out += Placement((0, 0, high + 0.08), X, Y, 1).pieces(pattern, 0.08)
+        out += _deck(lambda z: Placement((0, 0, z), X, Y, 1), pos + (s - w) / 2, inlays + (depth - l) / 2, w, l, high, i % 2)
         pos += s + t
     return out
+
+
+def _deck(at, x0, y0, w, l, high, blue):
+    """A deck of cards w × l from (x0, y0), high thick, lying on the plane at(z) puts z above:
+    white edges, and on top the first card's back (see card_back), red or blue."""
+    deck = rect(x0 + 3, y0 + 3, x0 + w - 3, y0 + l - 3).buffer(3, quad_segs=4)
+    field, pattern = card_back(x0, y0, w, l)
+    back = ("cardback", "cardback-blue")[blue]
+    return at(0).pieces([deck], high) + \
+        [dict(p, decoration=back) for p in at(high).pieces([field], 0.08)] + \
+        at(high + 0.08).pieces(pattern, 0.08)
 
 
 @recipe
@@ -2829,6 +2833,28 @@ def CardHolder(box, parts):
     return out
 
 
+@decoration("CardHolder", "cards")
+def card_piles(box):
+    """A pile of poker cards in each compartment (see _deck; smaller if the compartment is),
+    slid down the floor against the back, between a third of a deck and a full one, red and
+    blue in turn."""
+    import random
+    t, sx, y = box.thickness, box.sx, box.y
+    a = math.radians(box.angle)
+    down, top = (0, math.cos(a), -math.sin(a)), (0, math.sin(a), math.cos(a))   # as in CardHolder
+    front = _add((0, y, t), down, -y)
+    at = lambda z: Placement(_add(front, top, z), X, down, 1)
+    rng = random.Random(len(sx))
+    out, pos = [], 0
+    for i, s in enumerate(sx):
+        w, l = min(63.5, s - 0.5), min(88.9, y - 0.5)
+        high = min(rng.uniform(6, 17), box.h - t - y * math.sin(a) - 1)
+        if high > 0.5:
+            out += _deck(at, pos + (s - w) / 2, y - l - 0.3, w, l, high, i % 2)
+        pos += s + t
+    return out
+
+
 @recipe
 def DiscRack(box, parts):
     """Two square sides (u = Y from the front, v = Z) and between them an L leant back by the angle
@@ -2888,6 +2914,35 @@ def DisplayShelf(box, parts):
     return out
 
 
+@decoration("DiscRack", "vinyl")
+def vinyl_records(box):
+    """Vinyl records (the disc diameter, 2 mm thick or the slits' width if thinner) standing in
+    about three quarters of the slots, centred on the discs' centre and in their slot: black, a
+    few fine rings where the tracks part, a coloured paper label (a third of the diameter) on
+    each face and the spindle hole through it all."""
+    import random
+    r, o = box.disc_diameter / 2, box.outer
+    th = min(2.0, box.disc_thickness - 0.2)
+    c = Point(o / 2, o / 2)
+    hole = c.buffer(max(0.6, 0.012 * r * 2), quad_segs=4)
+    ring = lambda r0, r1: c.buffer(r1, quad_segs=24).difference(c.buffer(r0, quad_segs=24))
+    rng = random.Random(len(box.sx))
+    out, pos = [], 0
+    for s in box.sx:
+        x0 = pos + s / 2 - th / 2
+        pos += s
+        if rng.random() > 0.75:
+            continue
+        at = lambda dx, k=x0: Placement((k + dx, 0, 0), Y, Z, 1)
+        label = rng.choice(("vinyl-red", "vinyl-blue", "vinyl-yellow", "label"))
+        out += at(0).pieces([c.buffer(r, quad_segs=24).difference(hole)], th)
+        for dx in (-0.05, th):
+            tracks = [ring(r * f, r * f + 0.4) for f in sorted(rng.uniform(0.45, 0.9) for _ in range(3))]
+            out += [dict(p, decoration="vinyl-groove") for p in at(dx).pieces(tracks + [ring(0.95 * r, 0.97 * r)], 0.05)]
+            out += [dict(p, decoration=label) for p in at(dx).pieces([c.buffer(r / 3, quad_segs=16).difference(hole)], 0.05)]
+    return out
+
+
 @recipe
 def SBCMicroRack(box, parts):
     """Two sides (u from the top down, v = Y; the stackable feet at u = H) with the plain base plate
@@ -2926,6 +2981,47 @@ def PaintStorage(box, parts):
         out.append(plate(ch / 6 - t / 2))
     if box.additional_top:
         out.append(plate(ch - ch / 6 - t))
+    return out
+
+
+@decoration("PaintStorage", "paint")
+def paint_bottles(box):
+    """Dropper bottles of hobby paint (the can diameter less 1 mm, the can height tall) standing
+    on the bottom in about four fifths of the holes, through the plates: the paint showing in the
+    body, a white label round it, a stepped shoulder, the white dropper tip and a black cap. Where
+    the holes are comes from replaying the plates' callback with its holes recorded."""
+    import random
+    if box.drawer:
+        return []
+    t, R, H = box.thickness, box.candiameter / 2 - 1, box.canheight
+    if R < 2:
+        return []
+    at, holes = [(0, 0)], []
+    box.moveTo = lambda x, y, *a: at.append((at[-1][0] + x, at[-1][1] + y))
+    box.hole = lambda x, y, r=0.0, *a, **kw: holes.append((at[-1][0] + x, at[-1][1] + y))
+    try:
+        box.paintholes()
+    finally:
+        del box.moveTo, box.hole
+    rng = random.Random(len(holes))
+    out = []
+    for u, v in holes:
+        if rng.random() > 0.8:
+            continue
+        c = Point(u, v - t)                         # the plates lie from Y = -t
+        paint = rng.choice(("paint-red", "paint-blue", "paint-yellow", "paint-green", "paint-white", "paint-black"))
+
+        def add(kind, r, a, b):                    # r and the heights as fractions of R and H
+            out.extend(dict(p, decoration=kind) for p in Placement((0, 0, a * H), X, Y, 1)
+                       .pieces([c.buffer(r * R, quad_segs=12)], (b - a) * H))
+
+        add(paint, 1, 0, 0.12)
+        add("label", 1.02, 0.12, 0.55)
+        add(paint, 1, 0.55, 0.62)
+        add(paint, 0.85, 0.62, 0.66)
+        add(paint, 0.65, 0.66, 0.70)
+        add("paint-white", 0.35, 0.70, 0.76)        # the dropper tip
+        add("tin", 0.6, 0.76, 1.0)                  # the cap
     return out
 
 

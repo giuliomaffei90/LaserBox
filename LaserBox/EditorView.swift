@@ -547,6 +547,17 @@ final class AssemblyStage {
         "spice-yellow": SheetMaterial.surface(NSColor(red: 0.85, green: 0.62, blue: 0.10, alpha: 1), roughness: 0.9, edge: "float3(1.0)"),
         "spice-green": SheetMaterial.surface(NSColor(red: 0.38, green: 0.45, blue: 0.20, alpha: 1), roughness: 0.9, edge: "float3(1.0)"),
         "spice-brown": SheetMaterial.surface(NSColor(red: 0.42, green: 0.26, blue: 0.14, alpha: 1), roughness: 0.9, edge: "float3(1.0)"),
+        "vinyl": SheetMaterial.surface(NSColor(red: 0.05, green: 0.05, blue: 0.06, alpha: 1), roughness: 0.25, edge: "float3(1.0)"),
+        "vinyl-groove": SheetMaterial.surface(NSColor(red: 0.16, green: 0.16, blue: 0.18, alpha: 1), roughness: 0.15, edge: "float3(1.0)"),
+        "vinyl-red": SheetMaterial.surface(NSColor(red: 0.75, green: 0.15, blue: 0.12, alpha: 1), roughness: 0.7, edge: "float3(0.95)"),
+        "vinyl-blue": SheetMaterial.surface(NSColor(red: 0.15, green: 0.30, blue: 0.65, alpha: 1), roughness: 0.7, edge: "float3(0.95)"),
+        "vinyl-yellow": SheetMaterial.surface(NSColor(red: 0.92, green: 0.75, blue: 0.20, alpha: 1), roughness: 0.7, edge: "float3(0.95)"),
+        "paint-red": SheetMaterial.surface(NSColor(red: 0.75, green: 0.10, blue: 0.08, alpha: 1), roughness: 0.5, edge: "float3(1.0)"),
+        "paint-blue": SheetMaterial.surface(NSColor(red: 0.10, green: 0.25, blue: 0.65, alpha: 1), roughness: 0.5, edge: "float3(1.0)"),
+        "paint-yellow": SheetMaterial.surface(NSColor(red: 0.92, green: 0.75, blue: 0.10, alpha: 1), roughness: 0.5, edge: "float3(1.0)"),
+        "paint-green": SheetMaterial.surface(NSColor(red: 0.15, green: 0.45, blue: 0.20, alpha: 1), roughness: 0.5, edge: "float3(1.0)"),
+        "paint-white": SheetMaterial.surface(NSColor(red: 0.93, green: 0.93, blue: 0.90, alpha: 1), roughness: 0.5, edge: "float3(1.0)"),
+        "paint-black": SheetMaterial.surface(NSColor(red: 0.10, green: 0.10, blue: 0.11, alpha: 1), roughness: 0.5, edge: "float3(1.0)"),
     ]
 
     /// SCNShape extrudes a flat path along z, centred; the path's even-odd rule turns inner rings into holes.
