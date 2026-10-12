@@ -480,6 +480,7 @@ struct AssemblyView: NSViewRepresentable {
         "cards": SheetMaterial.surface(NSColor(red: 0.97, green: 0.96, blue: 0.93, alpha: 1), roughness: 0.6, edge: "float3(0.88)"),
         "cardback": SheetMaterial.surface(NSColor(red: 0.70, green: 0.10, blue: 0.13, alpha: 1), roughness: 0.45, edge: "float3(1.0)"),
         "cardback-blue": SheetMaterial.surface(NSColor(red: 0.12, green: 0.20, blue: 0.62, alpha: 1), roughness: 0.45, edge: "float3(1.0)"),
+        "keycap": SheetMaterial.surface(NSColor(red: 0.95, green: 0.95, blue: 0.93, alpha: 1), roughness: 0.4, edge: "float3(0.9)"),
     ]
 
     /// SCNShape extrudes a flat path along z, centred; the path's even-odd rule turns inner rings into holes.
@@ -497,6 +498,7 @@ struct AssemblyView: NSViewRepresentable {
         if let kind = piece.decoration, let look = decorationMaterials[kind] {
             shape.materials = [look]
         } else {  // the box's own parts, lids, and decorations cut from the sheet (a panel)
+            let material = piece.clear == true ? SheetMaterial.named("clear") : material
             shape.materials = [material.scn]
             if material.kind == .clearAcrylic {  // SceneKit ignores the material's transparency with these shaders
                 node.opacity = 0.45

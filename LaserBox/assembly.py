@@ -6,7 +6,7 @@ recipe per generator says where each part goes. Flexed regions are bent by slici
 narrow strips that follow an arc.
 
 Protocol: assemble(name, args) -> {"pieces": [{"rings": [[[u, v], …], …], "origin": [x, y, z],
-"u": [..], "v": [..], "side": ±1, "t": thickness[, "decoration": kind][, "lid": true]}, …], "turn": degrees,
+"u": [..], "v": [..], "side": ±1, "t": thickness[, "decoration": kind][, "lid": true][, "clear": true]}, …], "turn": degrees,
 "galleryLids": bool}  — world(u, v, w) = origin + u·U + v·V + w·side·(U×V)
 """
 import math
@@ -208,6 +208,7 @@ def polygons_of(loops, cuts=()):
             p = p.buffer(0)
             if p.is_empty:
                 continue
+            p = max(getattr(p, "geoms", [p]), key=lambda g: g.area)  # a bow tie (impossible sizes)
         inside = [n for n in seen if n["poly"].contains(p.representative_point())]
         node = {"poly": p, "holes": []}
         if len(inside) % 2:
@@ -273,11 +274,13 @@ class Placement:
     turn the part about V, towards V×U, with inner radius r (the flat part before u0 keeps U).
     keep(polygon) picks which of the part's pieces go here, when one cut part is several pieces.
     lid marks a lid (the 3D view has a button for them, the gallery leaves them out); decoration
-    marks other pieces the 3D view can hide (a removable panel), with that kind."""
+    marks other pieces the 3D view can hide (a removable panel), with that kind; clear pieces are
+    always shown in clear acrylic, whatever the chosen material (a display case's glass)."""
 
-    def __init__(self, origin, U, V, side=1, bends=(), offset=(0, 0), keep=None, decoration=None, lid=False):
+    def __init__(self, origin, U, V, side=1, bends=(), offset=(0, 0), keep=None, decoration=None, lid=False,
+                 clear=False):
         self.origin, self.U, self.V, self.side, self.bends, self.offset = origin, _norm(U), _norm(V), side, list(bends), offset
-        self.keep, self.decoration, self.lid = keep, decoration, lid
+        self.keep, self.decoration, self.lid, self.clear = keep, decoration, lid, clear
 
     def frame_at(self, u):
         """(position of local (u, 0), tangent) walking the bends."""
@@ -328,6 +331,8 @@ class Placement:
             piece["decoration"] = self.decoration
         if self.lid:
             piece["lid"] = True
+        if self.clear:
+            piece["clear"] = True
         return piece
 
 
@@ -1187,7 +1192,7 @@ def _turned(place, point, axis, degrees):
     phi = math.radians(degrees)
     turn = lambda v: _rot(v, _norm(axis), phi)
     return Placement(_add(point, turn(_add(place.origin, point, -1))), turn(place.U), turn(place.V), place.side,
-                     place.bends, place.offset, place.keep, place.decoration, place.lid)
+                     place.bends, place.offset, place.keep, place.decoration, place.lid, place.clear)
 
 
 def _hinge_disc(part, centre, r):
@@ -1445,6 +1450,280 @@ def BasedBox(box, parts):
     else:
         tops = {"E": [lid(h + t), lid(h)], "k": [lid(h), lid(h, x, (-1, 0, 0), -1)]}.get(e, [])
     others = [p for p in parts if p.record.label not in ("front", "back", "left", "right", "base")]
+    return out + list(zip(others, tops)) + _lid(box, others[len(tops):], x, y, h)
+
+
+@recipe
+def DisplayCase(box, parts):
+    """ClosedBox's walls round x × y × h, in clear acrylic, on the bottom (in the chosen material,
+    the case's base). Top and bottom are flanged plates whose finger holes are overhang + t/2 in
+    from their edge: their inner corner is overhang + t in. The top is glued on, not a lid."""
+    x, y, h = inner(box)
+    o = box.overhang + box.thickness
+    glass = dict(clear=True)
+    return [
+        Placement((0, 0, 0), X, Z, 1, **glass),          # Wall 1
+        Placement((0, 0, 0), Y, Z, -1, **glass),         # Wall 2
+        Placement((x, 0, 0), Y, Z, 1, **glass),          # Wall 4
+        Placement((0, y, 0), X, Z, -1, **glass),         # Wall 3
+        Placement((-o, -o, h), X, Y, 1, **glass),        # Top
+        Placement((-o, -o, 0), X, Y, -1),                # Bottom
+    ]
+
+
+def _thick(place, t):
+    """The placement, its pieces t thick (a layer cut from another sheet)."""
+    pieces = place.pieces
+    place.pieces = lambda polys, _: pieces(polys, t)
+    return place
+
+
+def _keypad_levels(box):
+    """Keypad's heights: the walls are drawn upside down, their deep finger edge (G) on top holding
+    the plates — the switch plate (top1_thickness) on top, the support plate (t) under it, the
+    hotswap plate (top2_thickness) under that — and their outset bottom edge (E) t below the
+    screwed bottom plate. Returns the walls' inner height h, the plates' (z, thickness) top
+    down, and the top of the switch plate."""
+    t, h = box.thickness, box.h
+    layers = [box.top1_thickness, t] + ([box.top2_thickness] if box.top2_enable else [])
+    z, levels = h + t + sum(layers), []
+    top = z
+    for k in layers:
+        z -= k
+        levels.append((z, k))
+    return h, levels, top
+
+
+@recipe
+def Keypad(box, parts):
+    """Walls round x × y, upside down (local v down from the G edge's inner face, h + t up); the
+    support, switch and (top2_enable) hotswap plates in the G edge's deep fingers; the bottom plate
+    recessed t up from the walls' bottom (their E outset), screwed to the four corner triangles on it
+    (as in ElectronicsBox: the triangles' finger holes 1.5 t above the plate's inner face)."""
+    t, tr = box.thickness, box.triangle
+    x, y = box._get_x_y()
+    h, levels, _ = _keypad_levels(box)
+    plate = lambda z, k: _thick(Placement((0, 0, z), X, Y, 1), k)
+    switch, support = (plate(*l) for l in levels[:2])
+    ring = _walls_round(x, y, (0, 0, h + t), -1)
+    out = [(p, q) for p, q in zip(parts, [ring[0], ring[1], ring[3], ring[2], support, switch])]
+    rest = parts[6:]
+    if box.top2_enable:
+        out.append((rest.pop(0), plate(*levels[2])))
+    out.append((rest[0], Placement((0, 0, t), X, Y, 1)))
+    first = Point(tr - 2, 2)
+    for c, U, V in [((0, 0), (-1, 0, 0), Y), ((x, 0), (0, -1, 0), (-1, 0, 0)),
+                    ((x, y), X, (0, -1, 0)), ((0, y), Y, X)]:
+        out.append((rest[1], Placement(_add((c[0], c[1], 3 * t), U, -tr), U, V, 1, keep=lambda q: q.contains(first))))
+    return out
+
+
+@decoration("Keypad", "keycap")
+def keycaps(box):
+    """On every switch hole (centred as in to_grid_callback) the switch's top housing, 14.6 mm square
+    and 6 mm high, in the box's material, and on it a keycap 8 mm high: 18 mm square at the bottom
+    (less if the key spacing is), stepped in to 3 mm less for the top 2 mm."""
+    spacing = box.btn_size + box.space_between_btn
+    m = box.box_padding + box.btn_size / 2
+    _, _, top = _keypad_levels(box)
+    w = min(18.0, spacing - 1.0)
+    sq = lambda s, r: rect(-s / 2 + r, -s / 2 + r, s / 2 - r, s / 2 - r).buffer(r, quad_segs=3)
+    housing, cap, crown = sq(14.6, 1), sq(w, 1.5), sq(w - 3, 2)
+    out = []
+    for i, (offset, n) in enumerate(box.columns_definition):
+        for j in range(n):
+            c = (m + i * spacing, m + offset + j * spacing)
+            out += [dict(p, decoration="switch") for p in Placement((*c, top), X, Y, 1).pieces([housing], 6)]
+            out += Placement((*c, top + 6), X, Y, 1).pieces([cap], 6)
+            out += Placement((*c, top + 12), X, Y, 1).pieces([crown], 2)
+    return out
+
+
+@recipe
+def BrickSorter(box, parts):
+    """The whole stack in use, whatever level is chosen (render() draws one): large sieve on top, then
+    medium, small, tiny and the bottom tray. Each level is 2 t + wiggle narrower than the one above
+    and centred under it; its walls reach startWidth of the "h" edge below its floor, a skirt round
+    the top of the level below, its floor lying on that level's walls. Front and back walls along X,
+    the floor between them. render() turns x, y, h into the level's inner sizes, so they are reset
+    from the arguments before drawing each level."""
+    t = box.thickness
+    sw = box.edges[box.bottom_edge].startWidth()   # the floor's top face above the walls' bottom
+    size = {k: box.non_default_args.get(k, box.argparser.get_default(k)) for k in ("x", "y", "h")}
+    chosen, levels = box.level, []
+    for level in box.level_desc:
+        box.level = level
+        box.x, box.y, box.h = size["x"], size["y"], size["h"]
+        start = len(RECORDS["all"])
+        box.render()
+        new, merged = {id(r) for r in RECORDS["all"][start:]}, {}
+        for p in box.ctx._dwg.parts:
+            if p.pathes and id(getattr(p, "record", None)) in new:
+                merged.setdefault(id(p.record), SimpleNamespace(record=p.record, pathes=[])).pathes += p.pathes
+        levels.append(list(merged.values()))
+    box.level = chosen
+    x0, y0 = levels[0][2].record.args[:2]
+    out, z = [], sw
+    for ps in reversed(levels):   # from the bottom tray up
+        (xi, hi), yi = ps[0].record.args[:2], ps[3].record.args[0]
+        if hi <= 0:   # h too low for this many levels: the generator's lower ones come out inside out
+            continue
+        c = ((x0 - xi) / 2, (y0 - yi) / 2, z)
+        out += list(zip(ps, [Placement(c, X, Z, 1), Placement(_add(c, Y, yi), X, Z, -1), Placement(c, X, Y, -1),
+                             Placement(c, Y, Z, -1), Placement(_add(c, X, xi), Y, Z, 1)]))
+        z += hi + t
+    return out
+
+
+@recipe
+def EuroRackSkiff(box, parts):
+    """A skiff lying open side up, the modules' width (hp × 5.08) along X and their 128.5 mm height
+    along Y: walls round it on the bottom, the long walls front and back, each with a 6 mm rail
+    inwards from its finger holes 1.5 t under the rim, its holes for the module screws."""
+    t, h = box.thickness, box.h
+    w, d = box.hp * 5.08, 128.5
+    front, right, back, left = _walls_round(w, d)
+    return [
+        Placement((0, 0, h - t), X, Y, -1),                  # rails: drawn along the hp width
+        Placement((w, d, h - t), (-1, 0, 0), (0, -1, 0), -1),
+        right, front, back, left,
+        Placement((0, 0, 0), Y, X, 1),                       # bottom (128.5 × width)
+    ]
+
+
+@recipe
+def ABox(box, parts):
+    """Walls round x × y × h on the bottom plate (none for bottom_edge e), drawn: front, back,
+    bottom, the lid style's parts (see _lid), then the sides."""
+    front, back, *rest, left, right = parts
+    x, h = front.record.args[:2]
+    y = left.record.args[0]
+    ring = _walls_round(x, y)
+    out = [(front, ring[0]), (back, ring[2]), (left, ring[3]), (right, ring[1])]
+    if box.bottom_edge != "e":
+        out.append((rest.pop(0), Placement((0, 0, 0), X, Y, -1)))
+    return out + _lid(box, rest, x, y, h)
+
+
+@recipe
+def RegularBox(box, parts):
+    """A frustum round the Z axis: the inner faces of the bottom and top plates are the regular
+    n-gons of corner radius r0 at z = 0 and r1 at h, their first side at the front; plates and discs
+    go in centred, as drawn seen from above. Each wall's inner face is the trapezoid between a bottom
+    and a top side (polygonWall: no args, u along the bottom side going round anticlockwise, seen
+    from outside). An end's lid style stacks outwards from its plate: angled lid: a plate inside the
+    walls and a larger one on them; angled lid2 and round lid: a ring, the lid on it. A bayonet
+    mount (top only) is BayonetBox's layers: under the top plate a disc, then the plate, then the lid
+    disc; their outer rings stay with the box, the inner ones go with the lid, lifted 20 mm."""
+    t, n = box.thickness, box.n
+    r0, r1, h = box.radius_bottom, box.radius_top, box.h
+    if box.outside:  # as in render()
+        r0, r1 = r0 - t / math.cos(math.pi / n), r1 - t / math.cos(math.pi / n)
+        if box.top == "none":
+            h = box.adjustSize(h, False)
+        elif "lid" in box.top and box.top != "angled lid":
+            h = box.adjustSize(h) - t
+        else:
+            h = box.adjustSize(h)
+    _, sh0, s0 = box.regularPolygon(n, radius=r0)
+    _, sh1, s1 = box.regularPolygon(n, radius=r1)
+
+    # Per part, its placements given its centre c in its drawn frame (centred coordinates, symmetric
+    # to the µm, can make SceneKit drop an octagon: the frame stays at the first side's start)
+    def end(style, z, out):
+        P = lambda dz=0.0, side=out, **kw: lambda c: [Placement((-c.x, -c.y, z + out * dz), X, Y, side, **kw)]
+        return {"closed": [P()], "hole": [P()], "angled hole": [P()],
+                "angled lid": [P(side=-out, lid=True), P(lid=True)],
+                "angled lid2": [P(), P(t, lid=True)], "round lid": [P(), P(t, lid=True)]}.get(style, [])
+
+    def layer(z, lift=20):  # a bayonet layer: its outer ring stays, the inner one goes with the lid
+        def places(c):
+            inner = lambda q: max(math.dist(p, (c.x, c.y)) for p in q.exterior.coords) < sh1 - t / 2
+            return [Placement((-c.x, -c.y, z), X, Y, 1, keep=lambda q: not inner(q)),
+                    Placement((-c.x, -c.y, z + lift), X, Y, 1, keep=inner, lid=True)]
+        return places
+
+    plates = end(box.bottom, 0.0, -1)
+    if box.top == "bayonet mount":
+        # render() draws them for the bottom too (it asks self.top): those are left out
+        plates += [lambda c: []] * 3 + [layer(h - t), layer(h),
+                                         lambda c: [Placement((-c.x, -c.y, h + t + 20), X, Y, 1, lid=True)]]
+    else:
+        plates += end(box.top, h, 1)
+    out = []
+    for p, places in zip(parts, plates):
+        c = Polygon(max(loops_of(p, local_matrix(p.record)), key=lambda l: abs(Polygon(l).area))).centroid
+        out += [(p, q) for q in places(c)]
+    H = math.hypot(h, sh1 - sh0)
+    for i, p in enumerate(parts[len(plates):]):
+        a = 2 * math.pi * i / n
+        ca, sa = math.cos(a), math.sin(a)
+        corner = (-s0 / 2 * ca + sh0 * sa, -s0 / 2 * sa - sh0 * ca, 0)
+        V = (sa * (sh1 - sh0) / H, -ca * (sh1 - sh0) / H, h / H)
+        out.append((p, Placement(corner, (ca, sa, 0), V, 1)))
+    return out
+
+
+@recipe
+def AngledBox(box, parts):
+    """A regular 2n + 2-gon stretched along X: the long front and back walls (lx) and n facets at
+    each end, drawn going round from the front as seen from outside, like the plates' outlines. The
+    plates' drawn edge is startWidth out from the inner polygon. angled lid: a lower lid in the
+    walls under an upper one on them; angled hole / lid2: a rim on the walls' fingers, its hole t in
+    from the walls; lid2's cut-out, glued under an upper lid on the rim, fills the hole."""
+    t = box.thickness
+    walls = [p for p in parts if (p.record.label or "").startswith("wall")]
+    lx, h = walls[0].record.args[:2]
+    side = walls[1].record.args[0]
+    n = len(walls) // 2 - 1
+    a = 360 / (2 * n + 2)
+    profile = _profile(([lx, a] + [side, a] * n) * 2)
+    dx = -min(c[0] for c, _ in profile)   # the first corner's X: the box starts at X = 0
+    out = [(w, Placement((dx + c[0], c[1], 0), (*d, 0), Z, 1)) for w, (c, d) in zip(walls, profile)]
+    plates = []  # (edge, z, side, lid)
+    if box.bottom_edge != "e":
+        plates.append(("f", 0, -1, False))
+    if box.top == "angled lid":
+        plates += [("e", h, -1, True), ("E", h, 1, True)]
+    elif box.top in ("angled hole", "angled lid2"):
+        plates.append(("F", h, 1, False))
+        if box.top == "angled lid2":
+            plates.append(("E", h + t, 1, True))
+    for p, (edge, z, side, lid) in zip(parts, plates):
+        local = ~(p.record.matrix * Affine.translation(0, box.edges[edge].startWidth()))
+        out.append((p, Placement((dx, 0, z), X, Y, side, lid=lid), local))
+        if edge == "F" and box.top == "angled lid2":   # the rim's cut-out, as a part of its own
+            hole = min(loops_of(p, local), key=lambda l: abs(Polygon(l).area))
+            path = SimpleNamespace(path=[("M", *hole[0])] + [("L", *q) for q in hole[1:] + hole[:1]], params={})
+            out.append((SimpleNamespace(record=p.record, pathes=[path]), Placement((dx, 0, h), X, Y, 1, lid=True),
+                        Affine.identity()))
+    return out
+
+
+@recipe
+def UniversalBox(box, parts):
+    """Walls round x × y × h, going round as seen from outside (front and back along x), on the
+    bottom. drawLid's part closes the walls at h: a fixed "top", or a lid (two plates for E: one in
+    the walls' outset, one on it; v: turned round, its hinge edge (drawn first) at the back, the
+    cabinet hinges left out; k: two halves, the right one drawn mirrored); then the lid style's
+    parts. The magenta "top hole" (f, F: a flange plate round the walls' top, taking the top's
+    place) is left out."""
+    t, e = box.thickness, box.top_edge
+    walls = {p.record.label: p for p in parts}
+    x, h = walls["front"].record.args[:2]
+    y = walls["left"].record.args[0]
+    ring = _walls_round(x, y)
+    out = [(walls["front"], ring[0]), (walls["right"], ring[1]), (walls["back"], ring[2]), (walls["left"], ring[3])]
+    if "bottom" in walls:
+        out.append((walls["bottom"], Placement((0, 0, 0), X, Y, -1)))
+    lid = lambda z, at=(0, 0), U=X, V=Y, side=1: Placement((*at, z), U, V, side, lid=True)
+    mx = (-1, 0, 0)
+    if e in "cfFhŠY":
+        tops = [Placement((0, 0, h), X, Y, 1)]
+    else:
+        tops = {"E": [lid(h + t), lid(h)], "i": [lid(h)], "L": [lid(h)], "v": [lid(h, (x, y), mx, (0, -1, 0))],
+                "k": [lid(h), lid(h, (x, 0), mx, Y, -1)]}.get(e, [])
+    others = [p for p in parts if p.record.label not in ("front", "back", "left", "right", "bottom", "top hole")]
     return out + list(zip(others, tops)) + _lid(box, others[len(tops):], x, y, h)
 
 

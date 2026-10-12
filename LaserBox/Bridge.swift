@@ -44,6 +44,7 @@ struct Piece: Decodable {
     let t: Double
     var decoration: String?
     var lid: Bool?
+    var clear: Bool?  // always clear acrylic, whatever the material (a display case's glass)
 }
 
 struct Assembly: Decodable {
