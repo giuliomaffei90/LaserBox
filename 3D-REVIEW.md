@@ -80,6 +80,26 @@ decorazioni e l'esploso. Per ognuno: cosa ho fatto, perché è dubbio, cosa si p
   chiavistello DinRailBox restano aperti di 0,22 mm). Nessun altro modello cambia con i valori
   predefiniti; con altri parametri non l'ho verificato.
 
+## Pannello Skadis e oggetti appesi
+
+- Il pannello forato (bianco, 5 mm, asole Skadis) sta dietro ogni oggetto da parete, 40 mm più largo
+  tutto intorno. Anche SpicesRack e BinTray (gruppo Mensole, ma appesi al muro). Non su SkadisBoard
+  (è il pannello) né su WallEdges (dimostrazione). Lo SkadisStand ha il pannello appoggiato sui ganci;
+  il DinRailBox ha anche la barra DIN.
+- Con muro "skadis" i ganci entrano nel pannello ma non sono allineati alle sue asole (le larghezze
+  dei modelli non seguono il passo di 40 mm); con "french cleat", "slatwall" e "dinrail" il pannello
+  c'è lo stesso, anche se nella realtà il sistema di fissaggio sarebbe un altro: da decidere se
+  mostrare il sistema giusto per ogni tipo di muro.
+- Il pannello compare anche nelle card della galleria (rimpicciolisce l'oggetto) e nell'esploso
+  svanisce con le altre decorazioni.
+- Oggetti appesi aggiunti: rotolo da cucina con asse, pialla, calibro, chiavi inglesi, scalpelli,
+  cacciaviti, pinze, chiavi, punte da trapano (anche in DrillStand), barattoli di spezie su WallRack.
+- Senza contenuto, perché generici: WallHook, WallPinRow, WallConsole, WallTypeTray,
+  WallStackableBin, WallHopper, WallStairs. Si potrebbero riempire (borse, cuffie, viti…).
+- La pialla sta quasi tutta dentro il porta-pialla e si vede poco.
+- Le posizioni di fessure e fori (chiavi inglesi, scalpelli) vengono dal contorno del generatore
+  ripercorso a mano: se il generatore cambia il disegno, vanno riviste.
+
 ## Ancora da fare
 
 - Modelli da parete e DrillStand: compilati e avviati, da provare nell'app; commit non ancora pushati.

@@ -699,6 +699,22 @@ final class AssemblyStage {
         "paint-green": SheetMaterial.surface(NSColor(red: 0.15, green: 0.45, blue: 0.20, alpha: 1), roughness: 0.5, edge: "float3(1.0)"),
         "paint-white": SheetMaterial.surface(NSColor(red: 0.93, green: 0.93, blue: 0.90, alpha: 1), roughness: 0.5, edge: "float3(1.0)"),
         "paint-black": SheetMaterial.surface(NSColor(red: 0.10, green: 0.10, blue: 0.11, alpha: 1), roughness: 0.5, edge: "float3(1.0)"),
+        "pegboard": SheetMaterial.surface(NSColor(red: 0.94, green: 0.94, blue: 0.92, alpha: 1), roughness: 0.8, edge: "float3(0.9)"),
+        "rail": SheetMaterial.surface(NSColor(red: 0.78, green: 0.80, blue: 0.82, alpha: 1), roughness: 0.3, edge: "float3(0.95)"),
+        "towel": SheetMaterial.surface(NSColor(red: 0.97, green: 0.97, blue: 0.95, alpha: 1), roughness: 0.95, edge: "float3(0.9)"),
+        "cardboard": SheetMaterial.surface(NSColor(red: 0.62, green: 0.47, blue: 0.32, alpha: 1), roughness: 0.9, edge: "float3(0.9)"),
+        "dowel": SheetMaterial.surface(NSColor(red: 0.80, green: 0.64, blue: 0.42, alpha: 1), roughness: 0.7, edge: "float3(0.9)"),
+        "iron": SheetMaterial.surface(NSColor(red: 0.12, green: 0.15, blue: 0.22, alpha: 1), roughness: 0.45, edge: "float3(0.9)"),
+        "steel": SheetMaterial.surface(NSColor(red: 0.72, green: 0.74, blue: 0.77, alpha: 1), roughness: 0.25, edge: "float3(0.95)"),
+        "wood-handle": SheetMaterial.surface(NSColor(red: 0.45, green: 0.22, blue: 0.12, alpha: 1), roughness: 0.55, edge: "float3(0.9)"),
+        "caliper-body": SheetMaterial.surface(NSColor(red: 0.16, green: 0.16, blue: 0.17, alpha: 1), roughness: 0.5, edge: "float3(0.95)"),
+        "lcd": SheetMaterial.surface(NSColor(red: 0.55, green: 0.60, blue: 0.52, alpha: 1), roughness: 0.3, edge: "float3(1.0)"),
+        "brass": SheetMaterial.surface(NSColor(red: 0.80, green: 0.65, blue: 0.30, alpha: 1), roughness: 0.3, edge: "float3(0.95)"),
+        "grip-red": SheetMaterial.surface(NSColor(red: 0.75, green: 0.12, blue: 0.10, alpha: 1), roughness: 0.6, edge: "float3(0.95)"),
+        "grip-yellow": SheetMaterial.surface(NSColor(red: 0.93, green: 0.75, blue: 0.12, alpha: 1), roughness: 0.6, edge: "float3(0.95)"),
+        "grip-black": SheetMaterial.surface(NSColor(red: 0.12, green: 0.12, blue: 0.13, alpha: 1), roughness: 0.6, edge: "float3(0.95)"),
+        "hss": SheetMaterial.surface(NSColor(red: 0.18, green: 0.18, blue: 0.20, alpha: 1), roughness: 0.35, edge: "float3(0.95)"),
+        "hss-gold": SheetMaterial.surface(NSColor(red: 0.80, green: 0.62, blue: 0.25, alpha: 1), roughness: 0.3, edge: "float3(0.95)"),
     ]
 
     /// SCNShape extrudes a flat path along z, centred; the path's even-odd rule turns inner rings into holes.

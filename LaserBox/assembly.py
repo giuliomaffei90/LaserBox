@@ -475,7 +475,8 @@ DECORATIONS = {}
 
 def decoration(generator, kind):
     def register(fn):
-        DECORATIONS[generator] = lambda box: [dict(p, decoration=p.get("decoration", kind)) for p in fn(box)]
+        DECORATIONS.setdefault(generator, []).append(
+            lambda box: [dict(p, decoration=p.get("decoration", kind)) for p in fn(box)])
         return fn
     return register
 
@@ -3076,21 +3077,7 @@ def spice_jars(box):
         for j in range(box.numx):
             if rng.random() > 0.75:
                 continue
-            centre = Point((box.diameter + box.space) * (j + 0.5), 0)
-
-            def add(kind, rr, a, b):
-                out.extend(dict(p, decoration=kind) for p in Placement(_add(bottom, axis, a), X, across, 1)
-                           .pieces([centre.buffer(rr, quad_segs=8)], b - a))
-
-            if rng.random() < 0.5:     # a tin
-                add("tin", r, 0, 0.3 * L)
-                add("label", r + 0.3, 0.3 * L, 0.75 * L)
-                add("tin", r, 0.75 * L, L - 10)
-                add("tin", r + 0.6, L - 10, L)
-                add("label", r - 6, L, L + 0.2)
-            else:                      # spices in glass
-                add(rng.choice(("spice-red", "spice-yellow", "spice-green", "spice-brown")), r, 0, L - 14)
-                add("lid-wood", r - 1, L - 14, L)
+            out += _jar(bottom, axis, X, ((box.diameter + box.space) * (j + 0.5), 0), r, L, rng)
     return out
 
 
@@ -3669,6 +3656,402 @@ def DinRailBox(box, parts):
     return items
 
 
+# ---------------------------------------------------------------- what hangs on the wall
+
+# Where each wall-mounted box's wall is (Y), as its recipe places it: a pegboard is shown there.
+WALLS = {
+    **{name: (lambda box: box.thickness) for name in (
+        "WallConsole", "WallHook", "WallCaliper", "WallSlottedHolder", "WallChiselHolder", "WallPliersHolder",
+        "WallWrenchHolder", "WallHopper", "RollHolder", "WallRollHolder", "KeyHolder")},
+    "WallPinRow": lambda box: 0.0,
+    "WallPlaneHolder": lambda box: 0.0,
+    "WallStairs": lambda box: box.y,
+    "WallRack": lambda box: (box.adjustSize(box.y) if box.outside else box.y) + box.thickness,
+    "WallTypeTray": lambda box: sum(box.sy) + box.thickness * len(box.sy),
+    "WallStackableBin": lambda box: box.y + box.thickness,
+    "WallDrillBox": lambda box: box.y + box.thickness,
+    "DinRailBox": lambda box: box.thickness + 8,       # the rail's back
+    # hung on the wall, though shelves
+    "SpicesRack": lambda box: box.hole_distance + box.hole_length + box.space / 2 + box.thickness,
+    "BinTray": lambda box: box.y + box.thickness,
+}
+
+
+def _extent(pieces):
+    """(min, max) world corners of the pieces' outlines and thickness."""
+    lo, hi = [math.inf] * 3, [-math.inf] * 3
+    for p in pieces:
+        U, V = p["u"], p["v"]
+        N = [c * p["side"] for c in _cross(U, V)]
+        for u, v in p["rings"][0]:
+            for w in (0, p["t"]):
+                q = [p["origin"][i] + u * U[i] + v * V[i] + w * N[i] for i in range(3)]
+                lo = [min(a, b) for a, b in zip(lo, q)]
+                hi = [max(a, b) for a, b in zip(hi, q)]
+    return lo, hi
+
+
+def _skadis(w, h):
+    """An IKEA Skådis like pegboard w × h (5 mm thick, rounded corners): slots 5 × 15 every 40 mm in
+    a row, the rows 20 mm apart, every other one offset by 20 (as SkadisBoard cuts them)."""
+    board = rect(8, 8, w - 8, h - 8).buffer(8, quad_segs=4)
+    slots = [LineString([(u, v - 5), (u, v + 5)]).buffer(2.5, quad_segs=4)
+             for r in range(1, int((h - 10) // 20)) for c in range(1, int((w - 2) // 20))
+             if (r + c) % 2 and 12 <= (u := c * 20 - 8 + (w % 20) / 2) <= w - 12 and 15 <= (v := r * 20) <= h - 15]
+    return board.difference(unary_union(slots))
+
+
+def pegboard(pieces, wall):
+    """A white pegboard on the wall behind the box (its front face at Y = wall), reaching 40 mm round
+    it, in steps of 20 mm."""
+    lo, hi = _extent([p for p in pieces if "decoration" not in p or "part" in p])
+    x0, z0 = math.floor((lo[0] - 40) / 20) * 20, math.floor((lo[2] - 40) / 20) * 20
+    x1, z1 = math.ceil((hi[0] + 40) / 20) * 20, math.ceil((hi[2] + 40) / 20) * 20
+    return [dict(p, decoration="pegboard")
+            for p in Placement((x0, wall, z0), X, Z, -1).pieces([_skadis(x1 - x0, z1 - z0)], 5)]
+
+
+@decoration("SkadisStand", "pegboard")
+def stand_board(box):
+    """The pegboard the stand holds, 400 wide, leaning on the arm's hooked front edge (the hooks
+    through its slots), from the floor up past the top connector."""
+    a = math.radians(box.angle)
+    length = box.extra_height_bottom + box.extra_height_top + max(box.connectors) * 20 + 60
+    up, front = (0, math.cos(a), math.sin(a)), (0, -math.sin(a), math.cos(a))
+    return Placement(_add((-200, 0, 0), front, 0.5), X, up, 1).pieces([_skadis(400, round(length / 20) * 20)], 5)
+
+
+@decoration("DinRailBox", "rail")
+def din_rail(box):
+    """The 35 mm top hat rail the box clips on (7.5 deep, 1 mm steel), across the box and 40 mm past
+    it each side, between the back and the pegboard."""
+    t, x, y, w, o = box.thickness, box.x, box.y, box.rail_width, box.rail_offset
+    z0 = (y - w) / 2 + o                       # its lower flange edge, as the clips have it
+    s = 1.0
+    # the hat: its base on the pegboard, the sides forward, the flanges outwards at the front (Y from
+    # the pegboard forwards, Z), extruded along X
+    profile = Polygon([(0, 5), (0, w - 5), (7.5 - s, w - 5), (7.5 - s, w), (7.5, w), (7.5, w - 5 - s), (s, w - 5 - s),
+                       (s, 5 + s), (7.5, 5 + s), (7.5, 0), (7.5 - s, 0), (7.5 - s, 5)])
+    return Placement((-40, t + 8, z0), (0, -1, 0), Z, -1).pieces([profile], x + 80)
+
+
+def _solid(kind, place, polys, depth):
+    """Decoration pieces: the polygons (in place's u, v) extruded depth along its normal."""
+    return [dict(p, decoration=kind) for p in place.pieces(polys if isinstance(polys, list) else [polys], depth)]
+
+
+def _rod(kind, at, axis, across, centre, r, a, b, segs=12):
+    """A round rod of radius r along axis, from a to b along it (from at), its centre at centre (in
+    across, axis × across)."""
+    return _solid(kind, Placement(_add(at, axis, a), across, _cross(axis, across), 1),
+                  Point(*centre).buffer(r, quad_segs=segs), b - a)
+
+
+def _kitchen_roll(box):
+    """A kitchen roll (0.9 of the roll diameter allowed, its 44 mm core; 4 mm shorter than the axle
+    between the arms) hanging on its dowel by the core's top, a sheet hanging from its front."""
+    t, w, d, a, h = box.thickness, box.width, box.diameter, box.axle, box.height
+    x0 = h / 4 + t / 2 - 3 * t                      # the left arm's mid-plane (see RollHolder)
+    za, ya = h - a / 2 - 3 * t, -d / 2              # the axle's centre
+    R, core, rod = 0.45 * d, 22.0, a / 2 - 0.5
+    zr = za - (core - 2 - rod)                      # the core rests on the dowel
+    out = _rod("dowel", (x0 - t / 2 - 6, 0, 0), X, Y, (ya, za), rod, 0, w + 2 * t + 12)
+    left = x0 + t / 2 + 2
+    out += _solid("towel", Placement((left, 0, 0), Y, Z, 1), Point(ya, zr).buffer(R, quad_segs=24).difference(
+        Point(ya, zr).buffer(core, quad_segs=16)), w - 4)
+    out += _solid("cardboard", Placement((left - 0.5, 0, 0), Y, Z, 1), Point(ya, zr).buffer(core, quad_segs=16).difference(
+        Point(ya, zr).buffer(core - 2, quad_segs=16)), w - 3)
+    out += _solid("towel", Placement((left, ya - R + 0.3, 0), X, Z, 1), rect(0, zr - R - 70, w - 4, zr), 0.4)
+    return out
+
+
+DECORATIONS.setdefault("RollHolder", []).append(_kitchen_roll)
+DECORATIONS.setdefault("WallRollHolder", []).append(_kitchen_roll)
+
+
+@decoration("WallPlaneHolder", "iron")
+def hand_plane(box):
+    """A bench plane standing on its heel on the bottom, its sole against the back strips, its toe
+    up under the holder: a cast iron sole and cheeks, the blade under its lever cap, a wooden tote
+    at the heel and a knob at the toe, scaled to the holder."""
+    t, w, l, h = box.thickness, box.width, box.length, box.height
+    sole = lambda dy: (0, -2 * t - dy, 2 * t)                    # the sole's face, dy up from it
+    flat = lambda dy: Placement(sole(dy), X, Z, 1)                # plan shapes, extruded up from dy
+    side = lambda x0: Placement((x0, -2 * t, 2 * t), (0, -1, 0), Z, -1)   # profiles (height, length)
+    k = 0.06 * w
+    out = _solid("iron", flat(0), rect(0.5, 0.5, w - 0.5, l - 0.5).buffer(0.5), 0.12 * h)
+    out += _solid("iron", flat(0.12 * h), [rect(0.5, 0.04 * l, k, 0.96 * l), rect(w - k, 0.04 * l, w - 0.5, 0.96 * l)], 0.3 * h)
+    out += _solid("steel", flat(0.12 * h), rect(0.15 * w, 0.46 * l, 0.85 * w, 0.62 * l), 0.4 * h)
+    out += _solid("iron", flat(0.52 * h), rect(0.2 * w, 0.47 * l, 0.8 * w, 0.6 * l), 0.08 * h)
+    tote = Polygon([(0.12 * h, 0.05 * l), (0.12 * h, 0.34 * l), (0.45 * h, 0.31 * l), (0.92 * h, 0.2 * l),
+                    (0.98 * h, 0.15 * l), (0.9 * h, 0.1 * l), (0.55 * h, 0.12 * l)])
+    grip = Polygon([(0.3 * h, 0.14 * l), (0.3 * h, 0.27 * l), (0.75 * h, 0.2 * l), (0.78 * h, 0.15 * l)])
+    out += _solid("wood-handle", side(0.38 * w), tote.difference(grip), 0.24 * w)
+    out += _solid("wood-handle", flat(0.12 * h), Point(w / 2, 0.88 * l).buffer(0.17 * w, quad_segs=12), 0.5 * h)
+    return out
+
+
+@decoration("WallCaliper", "steel")
+def caliper(box):
+    """A digital caliper standing in the holder's slot on the end of its beam (the slot hc wide, its
+    bottom h/4 up, 12 to 18 mm out of the wall edge), the jaws at the top."""
+    t, w, h, hc = box.thickness, box.width, box.h, box.height
+    y = t - (4 * t + hc / 2)           # the slot's middle: the sides' u = 4t … 4t + hc, u = 0 at Y = t
+    face = lambda dy, depth: Placement((0, y + depth / 2 + dy, 0), X, Z, 1)
+    z0, L = h / 4, 230.0
+    top = z0 + L
+    jaw = Polygon([(0, top - 22), (-40, top - 6), (-41, top), (w, top), (w, top - 22)])
+    out = _solid("steel", face(0, 3.5), [rect(0, z0, w, top - 22), jaw], 3.5)
+    slider = rect(-2, top - 95, w + 12, top - 30)
+    sjaw = Polygon([(-2, top - 30), (-38, top - 12), (-39, top - 8), (-2, top - 22)])
+    out += _solid("caliper-body", face(0, hc), [slider], hc)
+    out += _solid("steel", face(0, 3.5), [sjaw], 3.5)
+    out += _solid("lcd", face(-hc / 2 - 0.1, 0.2), [rect(1, top - 80, w + 8, top - 58)], 0.2)
+    return out
+
+
+class _Turtle:
+    """Follows a boxes.py outline (polyline's lengths and corners, radius or not) to find where it goes."""
+
+    def __init__(self, x=0.0, y=0.0, heading=0.0):
+        self.x, self.y, self.a = x, y, heading
+
+    def forward(self, l):
+        self.x += l * math.cos(math.radians(self.a))
+        self.y += l * math.sin(math.radians(self.a))
+
+    def corner(self, angle, r=0.0):
+        if r:
+            side = 1 if angle > 0 else -1    # the centre: left of the heading for a left turn
+            cx = self.x + side * r * -math.sin(math.radians(self.a))
+            cy = self.y + side * r * math.cos(math.radians(self.a))
+            phi = math.radians(angle)
+            dx, dy = self.x - cx, self.y - cy
+            self.x, self.y = cx + dx * math.cos(phi) - dy * math.sin(phi), cy + dx * math.sin(phi) + dy * math.cos(phi)
+        self.a += angle
+
+    def polyline(self, *args):
+        for i, v in enumerate(args):
+            if i % 2 == 0:
+                self.forward(v)
+            else:
+                self.corner(*v) if isinstance(v, tuple) else self.corner(v)
+
+
+@decoration("WallWrenchHolder", "steel")
+def wrenches(box):
+    """A combination wrench in each pair of slots, on its edge in them, resting on their bottom (the
+    slots run into the sides at 45°, down towards the wall; the sides' front edge replayed): w wide,
+    s thick, 9 w + 40 long, centred between the sides, an open end and a ring end beyond them."""
+    t, n, d = box.thickness, box.number, box.depth
+    s_min, s_max, w_min, w_max = box.min_strength, box.max_strength, box.min_width, box.max_width
+    h = (s_min + s_max) * n * 2 ** 0.5 + box.extra_distance * (n - 1) + w_max
+    xc = (box.x - 2 * t) / 2                            # between the sides' inner faces
+    tur = _Turtle(0, h, -90)                            # the sides' front edge (u = 0), drawn downwards
+    tur.polyline(t, 45)
+    out = []
+    for i in range(n):
+        w = w_min * ((n - i) / n) + w_max * (i / n)
+        s = s_min * ((n - i) / n) + s_max * (i / n)
+        a = math.radians(tur.a)
+        depth = w - s / 2 + 2 * s
+        D = (0, math.cos(a), math.sin(a))               # into the slot, in the sides' frame (u = Y + d)
+        N = (0, math.sin(a), -math.cos(a))              # across it, to the right
+        start = (0, tur.x - d, tur.y)
+        bottom = _add(_add(start, D, depth), N, s / 2)
+        if i == n - 1:
+            tur.polyline(depth, (-180, s / 2), w - 0.5 * s, (180, s / 2))
+        else:
+            tur.polyline(depth, (-180, s / 2), w - 0.5 * s, (135, s / 2), box.extra_distance, (45, s / 2))
+        L = 9 * w + 40
+        jaw = Point(-L / 2, w / 2).buffer(1.1 * w, quad_segs=12).difference(
+            rect(-L / 2 - 1.2 * w, 0.1 * w, -L / 2, 0.9 * w)).difference(Point(-L / 2, w / 2).buffer(0.4 * w))
+        ring = Point(L / 2, w / 2).buffer(0.95 * w, quad_segs=12).difference(Point(L / 2, w / 2).buffer(0.5 * w, quad_segs=12))
+        shape = unary_union([rect(-L / 2 + w, 0.05 * w, L / 2 - w, 0.95 * w), jaw, ring])
+        # its plane: X along it, back up the slot from its bottom; X × -D = N, its thickness across
+        origin = _add(_add(bottom, N, -(s - 0.2) / 2), X, xc)
+        out += _solid("steel", Placement(origin, X, tuple(-c for c in D), 1), shape, s - 0.2)
+    return out
+
+
+@decoration("WallChiselHolder", "steel")
+def chisels(box):
+    """A chisel in about four fifths of the holes (where the top's front edge replayed puts them):
+    its brass bolster on the top, the wooden handle above, the blade down through the hole."""
+    import random
+    t, n, td, h = box.thickness, box.number, box.tooldiameter, box.h
+    rh, r, sw = box.holediameter / 2, box.radius, box.slot_width
+    a = math.degrees(math.asin((r + sw / 2) / (r + rh)))
+    l = (td - sw - 2 * r) / 2
+    tur, centres = _Turtle(), []
+    for i in range(n):
+        tur.polyline(l, (180 - a, r), 0)
+        h_ = math.radians(tur.a)                      # the hole: turning right round its centre
+        centres.append((tur.x + rh * math.sin(h_), tur.y - rh * math.cos(h_)))
+        tur.polyline(0, (-360 + 2 * a, rh), 0, (180 - a, r), l)
+    rng = random.Random(n)
+    top = lambda u, v: (u, -box.depth + v, 0)          # the top's frame (it lies at Z = h)
+    rH = min(rh + 1, td / 2 - 0.3)
+    out = []
+    for u, v in centres:
+        if rng.random() > 0.8:
+            continue
+        c = top(u, v)
+        bw = min(1.4 * rh, rng.choice((0.6, 0.9, 1.2)) * rh)
+        out += _rod("brass", (0, 0, h + t), Z, X, (c[0], c[1]), rH, 0, 6)
+        out += _rod("wood-handle", (0, 0, h + t), Z, X, (c[0], c[1]), 0.8 * rH, 6, 110)
+        out += _rod("wood-handle", (0, 0, h + t), Z, X, (c[0], c[1]), 0.65 * rH, 110, 116)
+        out += _rod("steel", (0, 0, h + t), Z, X, (c[0], c[1]), 4, -t - 15, 0)
+        L = min(0.9 * h, 150)
+        blade = Polygon([(c[0] - bw / 2, h - L + 6), (c[0] - bw / 2, h - 15), (c[0] + bw / 2, h - 15), (c[0] + bw / 2, h - L)])
+        out += _solid("steel", Placement((0, c[1] + 2, 0), X, Z, 1), blade, 4)
+    return out
+
+
+@decoration("WallSlottedHolder", "steel")
+def screwdrivers(box):
+    """A screwdriver in about four fifths of the slots, its shaft at the slot's end, its handle
+    standing on the top (red, yellow or black)."""
+    import random
+    t, n, wt, ws, ds, h = box.thickness, box.number, box.tool_width, box.slot_width, box.slot_depth, box.h
+    d = min(2 * t, (wt - ws) / 4)
+    rng = random.Random(n)
+    depth = box.additional_depth + ds
+    out = []
+    for i in range(n):
+        if rng.random() > 0.8:
+            continue
+        c = (d + i * wt + wt / 2, -depth + ds - ws / 2)
+        grip = rng.choice(("grip-red", "grip-yellow", "grip-black"))
+        rg = min(0.4 * wt, 16)
+        out += _rod(grip, (0, 0, h + t), Z, X, c, rg, 0, 85)
+        out += _rod(grip, (0, 0, h + t), Z, X, c, 0.75 * rg, 85, 95)
+        out += _rod("steel", (0, 0, h + t), Z, X, c, ws / 2 - 0.6, -110, 0, segs=6)
+        out += _solid("steel", Placement((0, c[1] + 0.6, 0), X, Z, 1),
+                      Polygon([(c[0] - ws / 2 + 0.6, h + t - 110), (c[0] + ws / 2 - 0.6, h + t - 110),
+                               (c[0] + 0.8, h + t - 118), (c[0] - 0.8, h + t - 118)]), 1.2)
+    return out
+
+
+@decoration("WallPliersHolder", "steel")
+def pliers(box):
+    """A pair of pliers hung over the front bar in each compartment: the head up, the handles astride
+    the bar, their grips red, yellow or black."""
+    import random
+    t, sx, y, ht = box.thickness, box.sx, box.y, box.h_t
+    x = sum(sx) + (len(sx) - 1) * t
+    walls = [0] + [sum(sx[:i + 1]) + i * t for i in range(len(sx) - 1)] + [x]
+    yc, zt = -(y - t / 2), ht
+    jaws = Polygon([(yc - 7, zt + 10), (yc + 7, zt + 10), (yc + 3, zt + 64), (yc - 3, zt + 64)])
+    boss = Point(yc, zt + 12).buffer(9, quad_segs=8)
+    handles = unary_union([LineString([(yc + k * 4, zt + 8), (yc + k * 10, zt - 5), (yc + k * 26, zt - 120)]).buffer(4.5)
+                           for k in (-1, 1)])
+    cut = rect(yc - 60, zt - 40, yc + 60, zt + 80)
+    metal = unary_union([jaws, boss, handles.intersection(cut)])
+    grips = handles.difference(cut).buffer(1)
+    rng = random.Random(len(sx))
+    out = []
+    for a, b in zip(walls, walls[1:]):
+        x0 = (a + b) / 2 - 5
+        out += _solid("steel", Placement((x0, 0, 0), Y, Z, 1), metal, 10)
+        out += _solid(rng.choice(("grip-red", "grip-yellow", "grip-black")), Placement((x0 - 1, 0, 0), Y, Z, 1), grips, 12)
+    return out
+
+
+def _jar(at, axis, across, centre, r, L, rng):
+    """A spice jar r round and L long along axis from at: a black tin with a label round it and on
+    its lid, or spices in glass under a wooden lid, by chance."""
+    add = lambda kind, rr, a, b: _rod(kind, at, axis, across, centre, rr, a, b, segs=8)
+    if rng.random() < 0.5:     # a tin
+        return add("tin", r, 0, 0.3 * L) + add("label", r + 0.3, 0.3 * L, 0.75 * L) + add("tin", r, 0.75 * L, L - 10) + \
+            add("tin", r + 0.6, L - 10, L) + add("label", r - 6, L, L + 0.2)
+    return add(rng.choice(("spice-red", "spice-yellow", "spice-green", "spice-brown")), r, 0, L - 14) + \
+        add("lid-wood", r - 1, L - 14, L)
+
+
+@decoration("WallRack", "jar")
+def rack_jars(box):
+    """Spice jars standing on each shelf, in a row along it, about four in five places taken: as
+    wide as the shelf's depth allows (at most 50), 1.6 times as tall, less than the section."""
+    import random
+    t, x, y, sh = box.thickness, box.x, box.y, box.sh
+    if box.outside:
+        x, y = box.adjustSize(x, "h", "f"), box.adjustSize(y)
+    r = min(y - 6, 50) / 2
+    rng = random.Random(len(sh))
+    out, pos = [], 0
+    for s in sh:
+        L = min(3.2 * r + 10, s - t - 15)
+        n = int(x // (2 * r + 6))
+        if r > 5 and L > 10:
+            for j in range(n):
+                if rng.random() < 0.8:
+                    out += _jar((0, 0, pos + t), Z, X, (x / 2 + (j - (n - 1) / 2) * (2 * r + 6), y / 2), r, L, rng)
+        pos += s
+    return out
+
+
+@decoration("KeyHolder", "brass")
+def keys(box):
+    """On about two hooks in three a key ring sits in the hook's cup, its top on the hook's bottom
+    bar, one to three keys hanging from it, turned a little."""
+    import random
+    from shapely import affinity
+    t, d, p, H, T = box.thickness, box.hook_distance, box.padding_left_right, box.hook_height, box.hook_thickness
+    rng = random.Random(box.num_hooks)
+    r_in, wire = 9.0, 1.6
+    key = unary_union([Point(0, -8).buffer(11.5, quad_segs=10), rect(-3.5, -48, 3.5, -16),
+                       Polygon([(-3.5, -48), (3.5, -48), (3.5, -52), (0, -55), (-3.5, -51)])]).difference(
+        unary_union([Point(0, 0).buffer(2.4, quad_segs=6)] +
+                    [rect(1.5, -22 - 6 * i, 3.6, -19 - 6 * i) for i in range(0, 5, 2)]))
+    out = []
+    for i in range(box.num_hooks):
+        if rng.random() > 0.66:
+            continue
+        xc = p + i * (d + t) + t / 2
+        yc, zc = -(T + 0.5 * 0.7 * H), box.padding_bot + T - r_in   # the ring's centre, in the hook's cup
+        ring = Point(xc, zc).buffer(r_in + wire, quad_segs=16).difference(Point(xc, zc).buffer(r_in, quad_segs=16))
+        out += _solid("steel", Placement((0, yc + wire / 2, 0), X, Z, 1), ring, wire)
+        bottom = zc - r_in - wire / 2
+        for k in range(rng.randint(1, 3)):
+            shape = affinity.translate(affinity.rotate(key, rng.uniform(-12, 12), origin=(0, 0)), yc, bottom)
+            out += _solid(rng.choice(("brass", "brass", "steel")), Placement((xc - 3 + 3 * k - 1, 0, 0), Y, Z, 1), shape, 2)
+    return out
+
+
+def _drill_bits(box):
+    """Drill bits standing in about five in six compartments, one to three each, thicker to the right
+    (1.5 to 10 mm, as the compartment allows), from the floor to 15–40 mm over the row's top: black
+    or gold flutes, a bright shank, a stepped point."""
+    import random
+    t, sx, sy, sh, eh, x = box.thickness, box.sx, box.sy, box.sh, box.extra_height, box.x
+    rng = random.Random(len(sx) * 7 + len(sy))
+    out = []
+    for i, ry in enumerate(sy):
+        y0 = sum(sy[:i]) + i * t
+        for j, cx in enumerate(sx):
+            x0 = sum(sx[:j]) + j * t
+            if rng.random() > 0.85:
+                continue
+            dia = min(1.5 + 8.5 * j / max(1, len(sx) - 1), min(cx, ry) - 2)
+            if dia < 1:
+                continue
+            flutes = rng.choice(("hss", "hss", "hss-gold"))
+            for k in range(rng.randint(1, 3)):
+                c = (rng.uniform(x0 + dia / 2 + 0.5, x0 + cx - dia / 2 - 0.5), rng.uniform(y0 + dia / 2 + 0.5, y0 + ry - dia / 2 - 0.5))
+                floor = eh * (1 - c[0] / x)
+                L = eh + sh[i] - floor + rng.uniform(15, 40)
+                at, r = (0, 0, floor), dia / 2
+                out += _rod(flutes, at, Z, X, c, 0.35 * r, 0, 0.6) + _rod(flutes, at, Z, X, c, 0.75 * r, 0.6, 0.6 + 0.5 * r)
+                out += _rod(flutes, at, Z, X, c, r, 0.6 + 0.5 * r, 0.6 * L, segs=6)
+                out += _rod("steel", at, Z, X, c, r, 0.6 * L, L, segs=6)
+    return out
+
+
+DECORATIONS.setdefault("WallDrillBox", []).append(_drill_bits)
+DECORATIONS.setdefault("DrillStand", []).append(_drill_bits)
+
+
 # ---------------------------------------------------------------- driver
 
 def assemble(box):
@@ -3703,6 +4086,9 @@ def assemble(box):
         cuts = []
         polys = polygons_of(loops_of(part, matrix, cuts), cuts)
         pieces += [dict(p, part=n) for p in placement.pieces(polys, box.thickness)]
-    pieces += DECORATIONS.get(type(box).__name__, lambda b: [])(box)
     name = type(box).__name__
+    for fn in DECORATIONS.get(name, []):
+        pieces += fn(box)
+    if name in WALLS:
+        pieces += pegboard(pieces, WALLS[name](box))
     return {"pieces": pieces, "count": len(parts), "turn": TURN.get(name, 0), "galleryLids": name in GALLERY_LIDS}
