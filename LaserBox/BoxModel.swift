@@ -26,6 +26,8 @@ final class BoxModel {
     var galleryAssemblies: [String: Assembly] = [:]
     /// The gallery cards' pictures of them (see GalleryPictures).
     var galleryPictures: [String: NSImage] = [:]
+    /// The pictures being prepared at launch, done of all; nil once the gallery can show.
+    var preparing: (done: Int, of: Int)?
 
     /// Values the user changed, per generator, so switching box type and back keeps them.
     private var overrides: [String: [String: String]] = [:]
@@ -39,7 +41,28 @@ final class BoxModel {
             groups = try await bridge.list()
         } catch {
             startupError = error.localizedDescription
+            return
         }
+        await prepareGallery()
+    }
+
+    /// Every 3D card's picture, ready before the gallery shows and kept for the whole session: from
+    /// disk, or rendered (and kept there). A few at a time, so Python assembles the next boxes while
+    /// SceneKit draws one.
+    private func prepareGallery() async {
+        let names = Set(groups.flatMap(\.generators).filter(\.assembled).map(\.name)).sorted()
+        preparing = (0, names.count)
+        await withTaskGroup(of: Void.self) { group in
+            var next = names.makeIterator()
+            for _ in 0..<3 {
+                if let name = next.next() { group.addTask { await self.loadGalleryPicture(name) } }
+            }
+            for await _ in group {
+                preparing?.done += 1
+                if let name = next.next() { group.addTask { await self.loadGalleryPicture(name) } }
+            }
+        }
+        preparing = nil
     }
 
     func value(_ arg: Arg) -> String {

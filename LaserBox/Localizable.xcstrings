@@ -411,6 +411,16 @@
         }
       }
     },
+    "Preparing the 3D previews… %lld of %lld": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparo le anteprime 3D… %1$lld di %2$lld"
+          }
+        }
+      }
+    },
     "Python isn’t included in the app. Run scripts/bundle-runtime.sh and build again.": {
       "localizations": {
         "it": {

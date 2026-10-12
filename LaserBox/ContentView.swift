@@ -83,7 +83,7 @@ struct GalleryView: View {
         let sections = sections
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 36) {
-                ForEach(sections) { group in
+                ForEach(model.preparing == nil ? sections : []) { group in
                     VStack(alignment: .leading, spacing: 14) {
                         if category == .all {
                             Text(group.title).font(.title2.bold())
@@ -112,6 +112,14 @@ struct GalleryView: View {
                 ContentUnavailableView("Can’t Start boxes.py", systemImage: "exclamationmark.triangle", description: Text(error))
             } else if model.groups.isEmpty {
                 ProgressView("Loading the Boxes…")
+            } else if let preparing = model.preparing {
+                VStack(spacing: 12) {
+                    ProgressView(value: Double(preparing.done), total: Double(max(preparing.of, 1)))
+                        .frame(width: 280)
+                    Text("Preparing the 3D previews… \(preparing.done) of \(preparing.of)")
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
             } else if sections.isEmpty {
                 ContentUnavailableView.search(text: search)
             }
