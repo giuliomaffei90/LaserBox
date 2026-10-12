@@ -942,6 +942,25 @@ def CardBox(box, parts):
             for p in parts]
 
 
+@decoration("CardBox", "cards")
+def card_decks(box):
+    """A deck of poker cards (63.5 × 88.9, 54 cards ≈ 17 mm) lying in each compartment, smaller if
+    the compartment is: white edges, and on top the back of the first card, red inside a white rim."""
+    t = box.thickness
+    inlays = t if box.openingdirection == "right" else 0   # glued to the front and back
+    depth = box.boxdepth - 2 * inlays
+    high = min(17.0, box.boxhight - 3)
+    out, pos = [], t
+    for s in box.sx:
+        w, l = min(63.5, s - 0.5), min(88.9, depth - 0.5)
+        x0, y0 = pos + (s - w) / 2, inlays + (depth - l) / 2
+        card = lambda inset, r: rect(x0 + inset + r, y0 + inset + r, x0 + w - inset - r, y0 + l - inset - r).buffer(r, quad_segs=4)
+        out += Placement((0, 0, 0), X, Y, 1).pieces([card(0, 3)], high)
+        out += [dict(p, decoration="cardback") for p in Placement((0, 0, high), X, Y, 1).pieces([card(3, 1.5)], 0.15)]
+        pos += s + t
+    return out
+
+
 @recipe
 def RackBox(box, parts):
     """Rack19Box with mounting ears 2 holedist wide and no labels: back, side, front, side, bottom, lid

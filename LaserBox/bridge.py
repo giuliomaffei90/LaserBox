@@ -34,7 +34,18 @@ boxes.ArgumentParser = type("ThrowingArgumentParser", (argparse.ArgumentParser,)
 
 GENERATORS = {cls.__name__: cls for cls in boxes.generators.getAllBoxGenerators().values() if cls.webinterface}
 SKIPPED = {"input", "output", "format", "help"}
+# The app's own defaults where they differ from boxes.py's (the app sends only the values changed).
+DEFAULTS = {
+    "CardBox": {"y": 89, "h": 40, "sx": "63.5*2", "openingdirection": "right", "fingerhole_depth": 30},
+}
 INFO_LINK = re.compile(r"\s*\[[^\]]*\]\([^)]*\)")  # the web form's "[🛈](url)" help links
+
+
+def make(name):
+    """A generator with the app's defaults."""
+    box = GENERATORS[name]()
+    box.argparser.set_defaults(**DEFAULTS.get(name, {}))
+    return box
 
 
 def tr(text):
@@ -84,7 +95,7 @@ def describe(action, prefix):
 
 
 def generator_args(name):
-    box = GENERATORS[name]()
+    box = make(name)
     groups = []
     for group in box.argparser._action_groups:
         args = [describe(a, getattr(group, "prefix", None)) for a in group._group_actions if a.dest not in SKIPPED]
@@ -97,7 +108,7 @@ def generator_args(name):
 
 
 def render(name, args, fmt):
-    box = GENERATORS[name]()
+    box = make(name)
     box.translations = TRANSLATIONS
     try:
         box.parseArgs([f"--{k}={v}" for k, v in args.items()])
@@ -169,7 +180,7 @@ def handle(req):
     if req["cmd"] == "render":
         return {"data": render(req["name"], req.get("args", {}), req.get("format", "svg"))}
     if req["cmd"] == "assemble":
-        box = GENERATORS[req["name"]]()
+        box = make(req["name"])
         box.translations = TRANSLATIONS
         try:
             box.parseArgs([f"--{k}={v}" for k, v in req.get("args", {}).items()])
