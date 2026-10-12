@@ -112,18 +112,20 @@ struct EditorView: View {
             .pickerStyle(.segmented)
             .help("Show the cut sheet or the assembled box")
             if model.showsAssembly {
-                Toggle(isOn: $showsDecorations) {
-                    Label("Decorations", systemImage: "sparkles")
+                if model.assembly?.pieces.contains(where: { $0.decoration != nil }) == true {
+                    Toggle(isOn: $showsDecorations) {
+                        Label("Decorations", systemImage: "sparkles")
+                    }
+                    .toggleStyle(.button)
+                    .help("Show or hide the decorations: what goes in the box and removable panels")
                 }
-                .toggleStyle(.button)
-                .disabled(!(model.assembly?.pieces.contains { $0.decoration != nil } ?? false))
-                .help("Show or hide the decorations: what goes in the box and removable panels")
-                Toggle(isOn: $showsLids) {
-                    Label("Lids", systemImage: "archivebox")
+                if model.assembly?.pieces.contains(where: { $0.lid == true }) == true {
+                    Toggle(isOn: $showsLids) {
+                        Label("Lids", systemImage: "archivebox")
+                    }
+                    .toggleStyle(.button)
+                    .help("Show or hide the lids")
                 }
-                .toggleStyle(.button)
-                .disabled(!(model.assembly?.pieces.contains { $0.lid == true } ?? false))
-                .help("Show or hide the lids")
                 Picker("Material", selection: $materialID) {
                     ForEach(SheetMaterial.Kind.allCases) { kind in
                         Section(kind.title) {
