@@ -311,6 +311,16 @@
         }
       }
     },
+    "Lids": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Coperchi"
+          }
+        }
+      }
+    },
     "Loading the Boxes…": {
       "localizations": {
         "it": {
@@ -451,12 +461,22 @@
         }
       }
     },
-    "Show or hide the decorations: what goes in the box, removable lids and panels": {
+    "Show or hide the decorations: what goes in the box and removable panels": {
       "localizations": {
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mostra o nascondi le decorazioni: ciò che va nella scatola, i coperchi e i pannelli rimovibili"
+            "value": "Mostra o nascondi le decorazioni: ciò che va nella scatola e i pannelli rimovibili"
+          }
+        }
+      }
+    },
+    "Show or hide the lids": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostra o nascondi i coperchi"
           }
         }
       }

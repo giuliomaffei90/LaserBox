@@ -6,7 +6,7 @@ recipe per generator says where each part goes. Flexed regions are bent by slici
 narrow strips that follow an arc.
 
 Protocol: assemble(name, args) -> {"pieces": [{"rings": [[[u, v], …], …], "origin": [x, y, z],
-"u": [..], "v": [..], "side": ±1, "t": thickness[, "decoration": kind]}, …], "turn": degrees}  — world(u, v, w) = origin + u·U + v·V + w·side·(U×V)
+"u": [..], "v": [..], "side": ±1, "t": thickness[, "decoration": kind][, "lid": true]}, …], "turn": degrees}  — world(u, v, w) = origin + u·U + v·V + w·side·(U×V)
 """
 import math
 from types import SimpleNamespace
@@ -271,11 +271,12 @@ class Placement:
     world; side = +1 when the thickness goes along U×V, -1 the other way. bends = [(u0, u1, angle°, r)]
     turn the part about V, towards V×U, with inner radius r (the flat part before u0 keeps U).
     keep(polygon) picks which of the part's pieces go here, when one cut part is several pieces.
-    decoration marks the pieces as one the 3D view can hide (a lid), with that kind."""
+    lid marks a lid (the 3D view has a button for them, the gallery leaves them out); decoration
+    marks other pieces the 3D view can hide (a removable panel), with that kind."""
 
-    def __init__(self, origin, U, V, side=1, bends=(), offset=(0, 0), keep=None, decoration=None):
+    def __init__(self, origin, U, V, side=1, bends=(), offset=(0, 0), keep=None, decoration=None, lid=False):
         self.origin, self.U, self.V, self.side, self.bends, self.offset = origin, _norm(U), _norm(V), side, list(bends), offset
-        self.keep, self.decoration = keep, decoration
+        self.keep, self.decoration, self.lid = keep, decoration, lid
 
     def frame_at(self, u):
         """(position of local (u, 0), tangent) walking the bends."""
@@ -324,6 +325,8 @@ class Placement:
         piece = {"rings": rings(poly), "origin": list(origin), "u": list(T), "v": list(self.V), "side": self.side, "t": t}
         if self.decoration:
             piece["decoration"] = self.decoration
+        if self.lid:
+            piece["lid"] = True
         return piece
 
 
@@ -441,9 +444,9 @@ def NotesHolder(box, parts):
 
 
 # Decorations: pieces the 3D view can hide — things shown in the box but never cut (notes in a notes
-# holder…), registered here, and parts like a lifted lid, marked by their Placement. A kind with its
-# own look in the app (paper) gets that; any other kind (lid, panel — a removable back) is drawn in
-# the box's material. The gallery always hides lids.
+# holder…), registered here, and parts like a removable back panel, marked by their Placement. A kind
+# with its own look in the app (paper, dice) gets that; any other kind (panel) is drawn in the box's
+# material. Lids are not decorations: Placement(lid=True) marks them, with a button of their own.
 # name -> fn(box) -> pieces, each marked with its "decoration" kind (a piece may set its own: a die's
 # pips).
 DECORATIONS = {}
@@ -482,9 +485,9 @@ def BayonetBox(box, parts):
         z = i * t
         if i in (2, 3):
             out.append((p, Placement((0, 0, z), X, Y, 1, keep=lambda q: not inner(q))))
-            out.append((p, Placement((0, 0, z + lift), X, Y, 1, keep=inner, decoration="lid")))
+            out.append((p, Placement((0, 0, z + lift), X, Y, 1, keep=inner, lid=True)))
         elif i == 4:
-            out.append((p, Placement((0, 0, z + lift), X, Y, 1, decoration="lid")))
+            out.append((p, Placement((0, 0, z + lift), X, Y, 1, lid=True)))
         else:
             out.append((p, Placement((0, 0, z), X, Y, 1)))
     return out
@@ -506,7 +509,7 @@ def Rack19Box(box, parts):
         (back, Placement((0, y, 0), X, Z, -1)),
         (left, Placement((0, 0, 0), Y, Z, -1)),
         (bottom, Placement((0, 0, 0), X, Y, -1)),
-        (lid, Placement((0, 0, h), X, Y, -1, decoration="lid")),
+        (lid, Placement((0, 0, h), X, Y, -1, lid=True)),
     ]
     # Corner by corner, turning a quarter each time: (corner, U, V)
     for c, U, V in [((0, 0), (-1, 0, 0), Y), ((x, 0), (0, -1, 0), (-1, 0, 0)),
@@ -716,7 +719,7 @@ def EngravingFrame(box, parts):
     queue = list(parts)
     out = []
     if box.AddCoveringFrontPlate:  # glued on to hide the joints: a lid, so the grid shows them
-        out.append((queue.pop(0), P((0, -t, 0), X, Z, -1, decoration="lid")))
+        out.append((queue.pop(0), P((0, -t, 0), X, Z, -1, lid=True)))
     out.append((queue.pop(0), P((0, 0, 0), X, Z, -1)))
     if box.AddDummyFingers:   # the strip across the pocket's open top, fingers into the frame plate
         out.append((queue.pop(0), P((x0 + m / 2, t, z0 + w_in + t), X, (0, -1, 0), 1)))
@@ -824,10 +827,10 @@ def PirateChest(box, parts):
     panels = [walls["lid back"]] + [p for p in parts if p.record.label == "lid top"] + [walls["lid front"]]
     for p, (a, b) in zip(panels, zip(corners, corners[1:])):
         d = _norm((0, b[0] - a[0], b[1] - a[1]))
-        out.append((p, Placement((0, a[0], rim + a[1]), X, d, -1, decoration="lid")))
+        out.append((p, Placement((0, a[0], rim + a[1]), X, d, -1, lid=True)))
     lid_left, lid_right = [p for p in parts if not p.record.label][-2:]
-    out.append((lid_left, Placement((0, y + t, rim), (0, -1, 0), Z, 1, decoration="lid")))   # axis at its (0, 0)
-    out.append((lid_right, Placement((x, -t, rim), Y, Z, 1, decoration="lid")))              # axis at its (y + 2t, 0)
+    out.append((lid_left, Placement((0, y + t, rim), (0, -1, 0), Z, 1, lid=True)))   # axis at its (0, 0)
+    out.append((lid_right, Placement((x, -t, rim), Y, Z, 1, lid=True)))              # axis at its (y + 2t, 0)
     r = box.edges["O"].startWidth()   # the discs turning in the side walls' rings
     out += [(_hinge_disc(walls["left"], (-t, rim), r), left), (_hinge_disc(walls["right"], (y + t, rim), r), right)]
     return out
@@ -881,8 +884,8 @@ def SlidingLidBox(box, parts):
         "top left rail": Placement((0, y, top), F, X, 1),
         "bottom right rail": Placement((x, y, h - t), F, (-1, 0, 0), -1),
         "bottom left rail": Placement((0, y, h - t), F, X, 1),
-        "lid": Placement((m, y, h), F, X, 1, decoration="lid"),
-        "lid lip": Placement((m + rail, 0, h + t), X, Z, 1, decoration="lid"),
+        "lid": Placement((m, y, h), F, X, 1, lid=True),
+        "lid lip": Placement((m + rail, 0, h + t), X, Z, 1, lid=True),
         "back": Placement((0, y, 0), X, Z, -1),
         "front": Placement((0, 0, 0), X, Z, 1),
         "back rail": Placement((rail, y, top), X, F, -1),
@@ -913,17 +916,17 @@ def CardBox(box, parts):
     }
     if box.openingdirection == "front":   # the lid from the back (v = 0) to the front
         place.update({
-            "Lid": Placement((0.1 * t, y, h), X, (0, -1, 0), -1, decoration="lid"),
-            "Lid Lip": Placement((0.1 * t, 0, h + t), X, Z, 1, decoration="lid"),
-            "Lid topper (optional)": Placement((1.1 * t, 0, h + t), X, Y, 1, decoration="lid"),
+            "Lid": Placement((0.1 * t, y, h), X, (0, -1, 0), -1, lid=True),
+            "Lid Lip": Placement((0.1 * t, 0, h + t), X, Z, 1, lid=True),
+            "Lid topper (optional)": Placement((1.1 * t, 0, h + t), X, Y, 1, lid=True),
             "Lip Left": Placement((t, 0, h + t), Y, (-1, 0, 0), 1),
             "Lip Right": Placement((x, 0, h + t), Y, (-1, 0, 0), 1),
         })
     else:                                 # the lid from the left (u = 0) to the right
         place.update({
-            "Lid": Placement((0, 0.1 * t, h), X, Y, 1, decoration="lid"),
-            "Lid Lip": Placement((x, 0.1 * t, h + t), Y, Z, 1, decoration="lid"),
-            "Lid topper": Placement((0, 1.1 * t, h + t), X, Y, 1, decoration="lid"),
+            "Lid": Placement((0, 0.1 * t, h), X, Y, 1, lid=True),
+            "Lid Lip": Placement((x, 0.1 * t, h + t), Y, Z, 1, lid=True),
+            "Lid topper": Placement((0, 1.1 * t, h + t), X, Y, 1, lid=True),
             "Lip Front": Placement((0, 0, h + t), X, Y, 1),
             "Lip Back": Placement((0, y - t, h + t), X, Y, 1),
         })
@@ -950,7 +953,7 @@ def RackBox(box, parts):
         (front, Placement((0, 0, 0), X, Z, 1), ~(front.record.matrix * Affine.translation(2 * box.holedist, t))),
         (side2, Placement((0, 0, 0), Y, Z, -1)),
         (bottom, Placement((0, 0, 0), X, Y, -1)),
-        (lid, Placement((0, 0, h), X, Y, -1, decoration="lid")),
+        (lid, Placement((0, 0, h), X, Y, -1, lid=True)),
     ]
     for c, U, V in [((0, 0), (-1, 0, 0), Y), ((x, 0), (0, -1, 0), (-1, 0, 0)),
                     ((x, y), X, (0, -1, 0)), ((0, y), Y, X)]:
@@ -974,7 +977,7 @@ def ElectronicsBox(box, parts):
         (back, Placement((0, y, 0), X, Z, -1)),
         (bottom, Placement((0, 0, 0), X, Y, -1),
          ~(bottom.record.matrix * Affine.translation(hd + t, t)) if box.outsidemounts else local_matrix(bottom.record)),
-        (top, Placement((0, 0, h), X, Y, -1, decoration="lid")),
+        (top, Placement((0, 0, h), X, Y, -1, lid=True)),
     ]
     for c, U, V in [((0, 0), (-1, 0, 0), Y), ((x, 0), (0, -1, 0), (-1, 0, 0)),
                     ((x, y), X, (0, -1, 0)), ((0, y), Y, X)]:
@@ -997,7 +1000,7 @@ def RegularStarBox(box, parts):
         if half:  # half a turn about X, up by h, then phi about Z
             f = lambda v, dz=0.0: (c * v[0] + sn * v[1], sn * v[0] - c * v[1], dz - v[2])
             origin, U, V = f(origin, h), f(U), f(V)
-        return Placement(origin, U, V, side, decoration="lid" if half else None)
+        return Placement(origin, U, V, side, lid=True if half else None)
 
     out = []
     for half in (0, 1):
@@ -1036,7 +1039,7 @@ def SideHingeBox(box, parts):
         "inner - small side B": Placement((0, 0, 2 * hc - t), Y, down, 1),
         "outer - hinge side C": Placement((0, yi + o, hi), X, down, 1),
         "inner - bottom": Placement((0, 0, 0), X, Y, -1),  # drawn as seen from inside (the latch holes)
-        "outer - upper lid": Placement((0, -o, hi), X, Y, 1, decoration="lid"),
+        "outer - upper lid": Placement((0, -o, hi), X, Y, 1, lid=True),
     }
     out = [(q, place[q.record.label]) for q in parts if q.record.label in place]
     rest = [q for q in parts if not q.record.label]
@@ -1067,7 +1070,7 @@ def HingeBox(box, parts):
     x, h = parts[0].record.args[:2]
     y = parts[1].record.args[0]
     hl = parts[4].record.args[1]
-    lid = dict(decoration="lid")
+    lid = dict(lid=True)
     out = [(parts[0], Placement((0, 0, 0), X, Z, 1)),
            (parts[1], Placement((x, 0, 0), Y, Z, 1)),
            (parts[2], Placement((0, y, 0), (0, -1, 0), Z, 1)),
@@ -1119,8 +1122,16 @@ def HingeBox(box, parts):
                 U = (0, out_y, 0)
                 origin = _add(_add(axis, V, -e), _cross(U, V), -t / 2)
                 part, local = frames.pop(0)
-                out.append((part, Placement(origin, U, V, 1, keep=eye, decoration=None if i % 2 == 0 else "lid"), local))
+                out.append((part, Placement(origin, U, V, 1, keep=eye, lid=i % 2 == 1), local))
     return out
+
+
+def _turned(place, point, axis, degrees):
+    """The placement turned about the axis through point (a hinged lid, opened)."""
+    phi = math.radians(degrees)
+    turn = lambda v: _rot(v, _norm(axis), phi)
+    return Placement(_add(point, turn(_add(place.origin, point, -1))), turn(place.U), turn(place.V), place.side,
+                     place.bends, place.offset, place.keep, place.decoration, place.lid)
 
 
 def _hinge_disc(part, centre, r):
@@ -1139,7 +1150,7 @@ def IntegratedHingeBox(box, parts):
     the back wall, through the discs turning in the rings at the back of the sides (O on the left, o
     on the right, drawn as seen from outside). The lid, closed, goes from the rim up hl: its sides
     (p, P) are cut round the rings and the pins of its back wall (q) sit in the discs' slots. The
-    lid's front and back are drawn from the lid top down to the rim."""
+    lid's front and back are drawn from the lid top down to the rim. It is shown opened 25°."""
     t = box.thickness
     r = box.edges["O"].startWidth()            # the ring's outer radius
     hy2 = box.edges["P"].startWidth()          # the lid sides' base line above the rim
@@ -1147,7 +1158,7 @@ def IntegratedHingeBox(box, parts):
     h = parts[4].record.args[1]
     hl = parts[6].record.args[1]
     top = h + hl                               # the lid top's inner face
-    lid = dict(decoration="lid")
+    lid = dict(lid=True)
     left, right = Placement((0, y, 0), (0, -1, 0), Z, 1), Placement((x, 0, 0), Y, Z, 1)
     places = [
         left,                                                 # O
@@ -1163,7 +1174,9 @@ def IntegratedHingeBox(box, parts):
     ]
     out = list(zip(parts, places))
     out += [(_hinge_disc(parts[0], (-t, h), r), left), (_hinge_disc(parts[2], (y + t, h), r), right)]
-    return out
+    # shown a little open: the lid, and the discs its pins turn, about the axis
+    hinge = ((0, y + t, h), (-1, 0, 0), 25)
+    return [(q, _turned(p, *hinge) if p.lid or i >= len(parts) else p) for i, (q, p) in enumerate(out)]
 
 
 @recipe
@@ -1179,7 +1192,7 @@ def DiceBox(box, parts):
     h = parts[2].record.args[1]
     hl = parts[4].record.args[1]
     rim, top = h + t, h + 2 * t + hl          # top: the lid top's inner face
-    lid = dict(decoration="lid")
+    lid = dict(lid=True)
     left, right = Placement((0, 0, rim - r), Y, (0, 0, -1), 1), Placement((x, 0, 0), Y, Z, 1)
     places = [
         Placement((0, 0, h), X, Y, 1),                          # the box's dice plate
@@ -1260,9 +1273,9 @@ def TwoPiece(box, parts):
     y = parts[1].record.args[0]
     h = parts[4].record.args[1]
     top = max(h, hi)
-    return _walls_round(x, y) + _walls_round(x + 2 * o, y + 2 * o, (-o, -o, top), -1, decoration="lid") + [
+    return _walls_round(x, y) + _walls_round(x + 2 * o, y + 2 * o, (-o, -o, top), -1, lid=True) + [
         Placement((0, 0, 0), X, Y, -1),
-        Placement((-o, -o, top), X, Y, 1, decoration="lid"),
+        Placement((-o, -o, top), X, Y, 1, lid=True),
     ]
 
 
@@ -1284,8 +1297,8 @@ def UnevenHeightBox(box, parts):
         maxh = max(hs)
         top = maxh + box.lid_height
         lh = [maxh - h + box.lid_height for h in hs]
-        out.append((rest.pop(0), Placement((0, 0, top), X, Y, 1, decoration="lid")))
-        hanging = _walls_round(x, y, (0, 0, top), -1, decoration="lid")
+        out.append((rest.pop(0), Placement((0, 0, top), X, Y, 1, lid=True)))
+        hanging = _walls_round(x, y, (0, 0, top), -1, lid=True)
         sw = box.edges["F"].startWidth()
         for i in (3, 2, 1, 0):
             if not (lh[i] == lh[(i + 1) % 4] == 0.0):
@@ -1296,10 +1309,10 @@ def UnevenHeightBox(box, parts):
 
 def _lid(box, parts, x, y, h):
     """The lid style's parts (lids.Lid, drawn last: the lid, then its handle), closed on walls round
-    x × y with their top at h, as decorations "lid": (part, Placement) for the last parts. A handle
+    x × y with their top at h, as lids: (part, Placement) for the last parts. A handle
     stands in its slot, its catch under the lid; flatbrim and flatfang lids have no slot for it."""
     lid, t = box.lid, box.thickness
-    L = lambda o, U, V, side: Placement(o, U, V, side, decoration="lid")
+    L = lambda o, U, V, side: Placement(o, U, V, side, lid=True)
     seq, slot = [], None  # slot: centre on the lid's inner face, along the slot, out of the lid
     if lid.style == "flat":  # the bottom fits between the walls, the top lies on them
         bs = lid.brim_spacing
@@ -1318,7 +1331,7 @@ def _lid(box, parts, x, y, h):
         r = lid.getChestR(x)
         # chestTop passes its cc() y as x: its local v = 0 is its drawn edge, t out from the inner face
         seq = [L((-t, 0, h), X, Z, 1), L((-t, y, h), X, Z, -1),
-               Placement((0, -t, h), Z, Y, 1, bends=[(3 * t, 3 * t + math.pi * r, 180, r)], decoration="lid")]
+               Placement((0, -t, h), Z, Y, 1, bends=[(3 * t, 3 * t + math.pi * r, 180, r)], lid=True)]
         slot = ((x, x / 2 - t, h + 1.5 * t), Y, X)  # in the top's last straight 3t, at X = x
     elif lid.style in ("overthetop", "ontop"):  # a top with walls round it, hanging down
         H = lid.height
@@ -1328,7 +1341,7 @@ def _lid(box, parts, x, y, h):
         else:  # on the box's walls, with a tab inside each in the middle
             o, z = 0, h + H
             seq = [L((0, 0, z), X, Y, 1)]
-        ring = _walls_round(x - 2 * o, y - 2 * o, (o, o, z - H), decoration="lid")
+        ring = _walls_round(x - 2 * o, y - 2 * o, (o, o, z - H), lid=True)
         seq += [ring[0], ring[2], ring[3], ring[1]]  # front, back, left, right
         if lid.style == "ontop":
             b = h - 2 * t
@@ -1341,7 +1354,7 @@ def _lid(box, parts, x, y, h):
         if slot:
             c, A, N = slot
             P = lambda d, U, V, keep=None: Placement(tuple(c[i] + sum(k * w[i] for k, w in d) for i in range(3)),
-                                                     U, V, 1, keep=keep, decoration="lid")
+                                                     U, V, 1, keep=keep, lid=True)
             perp = _cross(A, N)
             if lid.handle.startswith("long"):  # its catch x/2 + 2t across
                 seq[-1] = [P([(-x / 4 - t, A), (-t, N), (-t / 2, perp)], A, N)]
@@ -1368,7 +1381,7 @@ def BasedBox(box, parts):
     ring = _walls_round(x, y)
     out = [(walls["right"], ring[0]), (walls["back"], ring[1]), (walls["left"], ring[2]),
            (walls["front"], ring[3]), (walls["base"], Placement((0, 0, 0), X, Y, -1))]
-    lid = lambda z, at=0, U=X, side=1: Placement((at, 0, z), U, Y, side, decoration="lid")
+    lid = lambda z, at=0, U=X, side=1: Placement((at, 0, z), U, Y, side, lid=True)
     if e in "cfFhŠY":
         tops = [Placement((0, 0, h), X, Y, 1)]
     elif e in "iLv":
@@ -1420,7 +1433,7 @@ def RoundedBox(box, parts):
             out.append((p, Placement((r, 0, z), X, Y, side)))
         else:  # the loose lid, lifted off; it is larger by the edge's spacing all round
             e = box.edges[box.edge_style].spacing()
-            out.append((p, Placement((r, -e, h + t + 20), X, Y, 1, decoration="lid")))
+            out.append((p, Placement((r, -e, h + t + 20), X, Y, 1, lid=True)))
     wall = [p for p in parts if p.record.primitive == "surroundingWall"]
     for p in wall:
         c4 = math.pi * r / 2

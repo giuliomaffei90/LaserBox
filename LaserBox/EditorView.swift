@@ -26,6 +26,7 @@ struct EditorView: View {
     @State private var exportError: String?
     @State private var materialID = SheetMaterial.standard.id  // every box opens in MDF
     @AppStorage("showsDecorations") private var showsDecorations = true
+    @AppStorage("showsLids") private var showsLids = true
 
     var body: some View {
         preview
@@ -69,7 +70,7 @@ struct EditorView: View {
             Group {
                 if let assembly = model.assembly {
                     AssemblyView(assembly: assembly, key: model.assemblyKey,
-                                 material: SheetMaterial.named(materialID), decorations: showsDecorations)
+                                 material: SheetMaterial.named(materialID), decorations: showsDecorations, lids: showsLids)
                 } else if let error = model.assemblyError {
                     ContentUnavailableView("No 3D View for This Box", systemImage: "cube.transparent", description: Text(error))
                 } else {
@@ -116,7 +117,13 @@ struct EditorView: View {
                 }
                 .toggleStyle(.button)
                 .disabled(!(model.assembly?.pieces.contains { $0.decoration != nil } ?? false))
-                .help("Show or hide the decorations: what goes in the box, removable lids and panels")
+                .help("Show or hide the decorations: what goes in the box and removable panels")
+                Toggle(isOn: $showsLids) {
+                    Label("Lids", systemImage: "archivebox")
+                }
+                .toggleStyle(.button)
+                .disabled(!(model.assembly?.pieces.contains { $0.lid == true } ?? false))
+                .help("Show or hide the lids")
                 Picker("Material", selection: $materialID) {
                     ForEach(SheetMaterial.Kind.allCases) { kind in
                         Section(kind.title) {
@@ -348,14 +355,14 @@ struct SVGPreview: NSViewRepresentable {
     }
 }
 
-/// The assembled box: every piece extruded and placed in the chosen material, plus its decorations.
+/// The assembled box: every piece extruded and placed in the chosen material, plus its lids and decorations.
 /// `interactive` gives the full orbit/zoom camera; otherwise `yaw`/`pitch` turn the box.
 struct AssemblyView: NSViewRepresentable {
     let assembly: Assembly
     let key: String          // changes when the geometry changes
     var material = SheetMaterial.standard
     var decorations = true
-    var hidesLids = false  // the gallery shows boxes without their lifted lids
+    var lids = true  // the gallery shows boxes without them
     var interactive = true
     var yaw: CGFloat = 0
     var pitch: CGFloat = 0
@@ -373,12 +380,12 @@ struct AssemblyView: NSViewRepresentable {
 
     func updateNSView(_ view: SCNView, context: Context) {
         let c = context.coordinator
-        let key = "\(key)|\(material.id)|\(decorations)|\(hidesLids)"
+        let key = "\(key)|\(material.id)|\(decorations)|\(lids)"
         if c.key != key {
             c.key = key
             c.spin.childNodes.forEach { $0.removeFromParentNode() }
             let box = SCNNode()
-            for piece in assembly.pieces where piece.decoration == nil || decorations && !(hidesLids && piece.decoration == "lid") {
+            for piece in assembly.pieces where piece.lid == true ? lids : piece.decoration == nil || decorations {
                 box.addChildNode(Self.node(for: piece, material: material))
             }
             let (minV, maxV) = box.boundingBox
@@ -478,7 +485,7 @@ struct AssemblyView: NSViewRepresentable {
         let node = SCNNode(geometry: shape)
         if let kind = piece.decoration, let look = decorationMaterials[kind] {
             shape.materials = [look]
-        } else {  // the box's own parts, and decorations cut from the sheet (a lid)
+        } else {  // the box's own parts, lids, and decorations cut from the sheet (a panel)
             shape.materials = [material.scn]
             if material.kind == .clearAcrylic {  // SceneKit ignores the material's transparency with these shaders
                 node.opacity = 0.45

@@ -35,13 +35,15 @@ struct Choice: Decodable {
 }
 
 /// One flat piece of the assembled box: polygon rings in mm (first ring outer, the rest holes),
-/// extruded by t along side·(u×v) and placed at origin. `decoration` (its kind) marks what goes in the box but isn't cut.
+/// extruded by t along side·(u×v) and placed at origin. `lid` marks a lid; `decoration` (its kind) other pieces
+/// the view can hide: what goes in the box but isn't cut, removable panels.
 struct Piece: Decodable {
     let rings: [[[Double]]]
     let origin, u, v: [Double]
     let side: Int
     let t: Double
     var decoration: String?
+    var lid: Bool?
 }
 
 struct Assembly: Decodable {
