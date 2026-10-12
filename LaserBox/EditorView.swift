@@ -481,6 +481,9 @@ struct AssemblyView: NSViewRepresentable {
         "cardback": SheetMaterial.surface(NSColor(red: 0.70, green: 0.10, blue: 0.13, alpha: 1), roughness: 0.45, edge: "float3(1.0)"),
         "cardback-blue": SheetMaterial.surface(NSColor(red: 0.12, green: 0.20, blue: 0.62, alpha: 1), roughness: 0.45, edge: "float3(1.0)"),
         "keycap": SheetMaterial.surface(NSColor(red: 0.95, green: 0.95, blue: 0.93, alpha: 1), roughness: 0.4, edge: "float3(0.9)"),
+        "pen": SheetMaterial.surface(NSColor(red: 0.86, green: 0.89, blue: 0.92, alpha: 1), roughness: 0.15, edge: "float3(0.95)"),
+        "pen-cap": SheetMaterial.surface(NSColor(red: 0.10, green: 0.25, blue: 0.75, alpha: 1), roughness: 0.35, edge: "float3(0.9)"),
+        "pen-tip": SheetMaterial.surface(NSColor(red: 0.80, green: 0.80, blue: 0.82, alpha: 1), roughness: 0.2, edge: "float3(0.9)"),
     ]
 
     /// SCNShape extrudes a flat path along z, centred; the path's even-odd rule turns inner rings into holes.

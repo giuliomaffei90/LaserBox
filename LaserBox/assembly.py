@@ -58,7 +58,7 @@ def install():
             RECORDS["current"] = stack[-1]
             RECORDS["all"].append(stack[-1])
             RECORDS["pending"] = {}
-        else:
+        elif stack:  # a bare move(…) closing a group of parts (HobbyCase) has no part of its own
             stack.pop()
             RECORDS["current"] = stack[-1] if stack else None
         result = orig_move(self, x, y, where, before, label)
@@ -149,6 +149,15 @@ def _bezier(p0, p1, p2, p3, n=8):
     return pts
 
 
+def _is_cut(rgb):
+    """Black (outer) and blue (inner) paths are cut; red annotations and green or cyan etchings
+    aren't, and must not make holes."""
+    if rgb is None:
+        return True
+    r, g, b = (rgb.red, rgb.green, rgb.blue) if hasattr(rgb, "red") else tuple(rgb)[:3]
+    return (r, g) == (0, 0)
+
+
 def _is_black(rgb):
     if rgb is None:
         return True
@@ -178,6 +187,8 @@ def loops_of(part, inverse, cuts=None):
         cur.clear()
 
     for path in part.pathes:
+        if not _is_cut(path.params.get("rgb")):
+            continue
         for c in path.path:
             kind = c[0]
             if kind == "M":
@@ -2117,6 +2128,575 @@ def UBox(box, parts):
     out += list(zip(others, tops))
     # the lid frame's X (y long) is world Y, its Y (x long) world -X from X = x
     return out + [(p, _turned(q, (x / 2, x / 2, 0), Z, 90)) for p, q in _lid(box, others[len(tops):], y, x, h)]
+
+
+def _hobbycase_shelf_rows(slots, n):
+    """The n shelves' slots (1 … slots, bottom up) spread evenly over a column's slots."""
+    return [int((k + 1) * (slots + 1) / (n + 1) + 0.5) for k in range(min(n, slots))]
+
+
+@recipe
+def HobbyCase(box, parts):
+    """A case standing open at the front (Y = 0): columns unit_w wide side by side (X), rows unit_h
+    high stacked (Z), each slot between rows t high for a shelf or a set of rails. The base plate is
+    the back (inner face at Y = outside_depth, drawn as seen from the front) with top and bottom
+    plates and the outer side walls, all outside_depth deep, jointed into it; between columns a
+    pair of back-to-back walls, unit_d deep from the back (inset 2 t from the front with
+    inset_shelves). Walls and plates are drawn from the back (u = 0 / v = 0). Shelves fill the
+    slots spread evenly up each column; the rest take a set of rails: one strip lying flat in the
+    slot along each side wall and a shorter one along the back, sticking 2 t out into the column.
+    The cover stands on the floor in front of it all (a lid)."""
+    t, w, rows, uh = box.thickness, box.unit_w, box.rows, box.unit_h
+    W, H, D, d = box.inside_w, box.inside_h, box.outside_depth, box.inside_depth
+    starts = [sum(w[:c]) + 2 * t * c for c in range(len(w))]   # the columns' left inner faces
+    slot_z = lambda r: r * uh + (r - 1) * t                      # a slot's bottom face
+    back, inset = (0, -1, 0), D - d
+    shelves, rails = [], []
+    for c, n in enumerate(box.shelves_n):
+        rows_c = _hobbycase_shelf_rows(rows - 1, n)
+        shelves.append([Placement((starts[c], inset, slot_z(r)), X, Y, 1) for r in rows_c])
+        for r in (r for r in range(1, rows) if r not in rows_c):
+            z = slot_z(r)
+            rails += [Placement((starts[c], inset, z), Y, X, -1),                       # left side
+                      Placement((starts[c] + 4 * t, D, z), X, back, -1),                # back, centred
+                      Placement((starts[c] + w[c], inset, z), Y, (-1, 0, 0), 1)]        # right side
+    inner_walls = []
+    for s in starts[1:]:   # the pair between two columns, facing them
+        inner_walls += [Placement((s - 2 * t, D, 0), back, Z, -1), Placement((s, D, 0), back, Z, 1)]
+    out = []
+    for p in parts:
+        kind = (p.record.label or "rail").split()[0]
+        if kind == "shelf":
+            c = int(p.record.label.split("column ")[1].split(")")[0])
+            place = shelves[c].pop(0) if shelves[c] else None   # more shelves than slots
+        else:
+            place = {
+                "base": Placement((0, D, 0), X, Z, -1),
+                "cover": Placement((-t, 0, -t), X, Z, 1, lid=True),
+                "bottom": Placement((0, D, 0), X, back, 1),
+                "top": Placement((0, D, H), X, back, -1),
+                "left": Placement((0, D, 0), back, Z, 1),
+                "vertical": inner_walls.pop(0) if kind == "vertical" else None,
+                "right": Placement((W, D, 0), back, Z, -1),
+                "rail": rails.pop(0) if kind == "rail" and rails else None,
+            }[kind]
+        if place:
+            out.append((p, place))
+    return out
+
+
+@recipe
+def DrillBox(box, parts):
+    """Walls round sum(sx) × sum(sy), all four drawn alike (f on the right, F on the left), on the
+    bottom (none for bottom_edge e); the perforated plates in the walls' finger holes, one on top
+    of each section sh but the last, the one with the size frames on top. Then the lid style's
+    parts (see _lid)."""
+    t, sh = box.thickness, box.sh
+    x, y = sum(box.sx), sum(box.sy)
+    h = sum(sh) + t * (len(sh) - 1)
+    front, right, back, left = _walls_round(x, y)
+    out = list(zip(parts[:4], [front, right, left, back]))
+    rest = [p for p in parts[4:]]
+    if box.bottom_edge != "e":
+        out.append((rest.pop(0), Placement((0, 0, 0), X, Y, -1)))
+    for i in range(len(sh) - 1):
+        out.append((rest.pop(0), Placement((0, 0, sum(sh[:i + 1]) + i * t), X, Y, 1)))
+    return out + _lid(box, rest, x, y, h)
+
+
+@recipe
+def PenHolderBox(box, parts):
+    """Walls round x × y × h (render() turns them into inner sizes), on the bottom (none for
+    bottom_edge e), the two perforated plates in the walls' finger holes: plate 1 plate1_offset
+    under the top, plate 2 plate_gap under it."""
+    t, x, y, h = box.thickness, box.x, box.y, box.h
+    z1 = h - box.plate1_offset - t      # plate 1's underside
+    front, right, back, left = _walls_round(x, y)
+    place = {"front_face": front, "back_face": back, "left_side": left, "right_side": right,
+             "bottom": Placement((0, 0, 0), X, Y, -1),
+             "plate_1": Placement((0, 0, z1), X, Y, 1), "plate_2": Placement((0, 0, z1 - box.plate_gap), X, Y, 1)}
+    return [(p, place[p.record.label]) for p in parts]
+
+
+@decoration("PenHolderBox", "pen")
+def penholder_pens(box):
+    """Bic Cristal pens (hexagonal barrel 7.5 mm across flats, 150 mm long with the cap; thinner
+    if the holes or the caps' spacing are, shorter if the box is, so a third stands out) standing
+    on the bottom in about 40 % of the holes (at most 7), through both plates: half with the cap
+    on top (clip and all; the tip is inside it), half tip down with the end plug on top. The ink
+    in its tube shows through the translucent barrel."""
+    import random
+    x, y, h, cd = box.x, box.y, box.h, box.cap_diam
+    rh = box.pen_diam / 2
+    s = min(1.0, (rh - 0.3) / 4.33, cd / 12.6)       # 4.33: the hexagon's corner radius
+    if s <= 0.1:
+        return []
+    L = min(150.0, 1.5 * h)
+    k = L / 150
+    x0, y0 = (x - (box.nx - 1) * cd) / 2, (y - (box.ny - 1) * cd) / 2
+    holes = [(x0 + i * cd, y0 + j * cd) for j in range(box.ny) for i in range(box.nx)]
+    holes = [(cx, cy) for cx, cy in holes if rh <= cx <= x - rh and rh <= cy <= y - rh]
+    if not holes:
+        return []
+    rng = random.Random(len(holes))
+    chosen = [rng.randrange(len(holes))]   # spread out: each the farthest from the others, give or take
+    while len(chosen) < min(len(holes), 7, max(1, round(0.4 * len(holes)))):
+        chosen.append(max((i for i in range(len(holes)) if i not in chosen),
+                          key=lambda i: min(math.dist(holes[i], holes[j]) for j in chosen) + rng.uniform(0, 0.8 * cd)))
+    out = []
+
+    def add(kind, poly, z0, z1):
+        out.extend(dict(p, decoration=kind) for p in Placement((0, 0, z0), X, Y, 1).pieces([poly], z1 - z0))
+
+    for n, i in enumerate(chosen):
+        a = math.radians(rng.uniform(-10, 10))
+        off, phi = rng.uniform(0, 0.5) * (rh - 4.33 * s), rng.uniform(0, 2 * math.pi)
+        cx, cy = holes[i][0] + off * math.cos(phi), holes[i][1] + off * math.sin(phi)
+        disc = lambda r: Point(cx, cy).buffer(r * s, quad_segs=4)
+        hexagon = Polygon([(cx + 4.33 * s * math.cos(a + j * math.pi / 3), cy + 4.33 * s * math.sin(a + j * math.pi / 3))
+                           for j in range(6)])
+        ink = rng.uniform(0.3, 0.8)
+        if n % 2 == 0:      # the cap on top, the barrel from the bottom up into it
+            top = L - 33 * k
+            add("pen", hexagon.difference(disc(1.9)), 0, top)
+            add("pen-cap", disc(1.4), (1 - ink) * top, top)   # the ink, at the tip end
+            add("pen-cap", disc(4.9), top, L - 4 * k)
+            add("pen-cap", disc(4.0), L - 4 * k, L - k)
+            add("pen-cap", disc(2.8), L - k, L)
+            # the clip: a flat strip standing 0.3 mm off the cap, joined to it at the top
+            u = (math.cos(a), math.sin(a))
+            strip = lambda r0, r1, w: Polygon([(cx + r * s * u[0] - e * w * s * u[1], cy + r * s * u[1] + e * w * s * u[0])
+                                               for r, e in ((r0, -1), (r1, -1), (r1, 1), (r0, 1))])
+            add("pen-cap", strip(5.2, 6.2, 1.6), L - 28 * k, L - 6 * k)
+            add("pen-cap", strip(4.5, 6.2, 1.6), L - 6 * k, L - 2.5 * k)
+        else:               # tip down: point, its holder, the clear cone, the barrel, the end plug
+            top = 0.93 * L - 3 * k
+            add("pen-tip", Point(cx, cy).buffer(0.5, quad_segs=4), 0, 1.5 * k)   # SceneKit drops a smaller one
+            add("pen-tip", disc(1.0), 1.5 * k, 4 * k)
+            for j, r in enumerate((1.8, 2.6, 3.4)):
+                add("pen", disc(r), (4 + 3 * j) * k, (7 + 3 * j) * k)
+            add("pen", hexagon.difference(disc(1.9)), 13 * k, top)
+            add("pen-cap", disc(1.4), 13 * k, 13 * k + ink * (top - 13 * k))
+            add("pen-cap", disc(2.9), top, top + 1.2 * k)
+            add("pen-cap", disc(1.8), top + 1.2 * k, top + 3 * k)
+    return out
+
+
+def _gridfinity_plate(part, place):
+    """(part, place, local frame) for a Gridfinity plate: its largest piece only (no pads cut from
+    the grid's openings, no scrap in the dovetail notches), its etching left out (where the feet or
+    the bins go), and outline pieces drawn one by one (TrayLayout's base plate) joined into loops."""
+    etched = lambda p: (lambda c: c is not None and (c.red, c.green, c.blue) == (0, 255, 0))(p.params.get("rgb"))
+    cuts, opens = [], []
+    loops = loops_of(SimpleNamespace(pathes=[p for p in part.pathes if not etched(p)]), local_matrix(part.record), cuts)
+    near = lambda a, b: math.dist(a, b) < 0.2
+    while cuts:
+        chain, turned = cuts.pop(), False
+        while not near(chain[0], chain[-1]):
+            nxt = next((c for c in cuts if near(chain[-1], c[0]) or near(chain[-1], c[-1])), None)
+            if nxt is None:
+                if turned:
+                    break
+                chain, turned = chain[::-1], True
+                continue
+            cuts.remove(nxt)
+            chain += (nxt if near(chain[-1], nxt[0]) else nxt[::-1])[1:]
+        (loops.append(chain[:-1]) if near(chain[0], chain[-1]) else opens.append(chain))
+    main = max(polygons_of(loops, opens), key=lambda q: q.area)
+    ring = lambda r: SimpleNamespace(path=[("M", *r[0])] + [("L", *q) for q in r[1:]], params={})
+    return SimpleNamespace(record=part.record, pathes=[ring(list(r.coords)) for r in [main.exterior, *main.interiors]]), \
+        place, Affine.identity()
+
+
+def _gridfinity_feet(box, pads, z):
+    """The feet (pads) under the floor at z, centred on the etched corner cells of the nx × ny grid
+    (pitch apart, the grid margin / 2 + t out from the inner faces); at most one per corner."""
+    t, p, f = box.thickness, box.pitch, box.opening - box.opening_margin
+    c = -t - box.margin / 2 + (p - f) / 2
+    corners = [(c + i * p, c + j * p) for i in sorted({0, box.nx - 1}) for j in sorted({0, box.ny - 1})]
+    return [(pad, Placement((cx, cy, z), X, Y, -1)) for pad, (cx, cy) in zip(pads, corners)]
+
+
+@recipe
+def GridfinityBase(box, parts):
+    """The grid plate the bins drop into lies on the floor, centred in walls round it (m clear all
+    round), on the bottom; the lid style's parts close the walls at h. h = 0: the grid plate alone,
+    refined: on the refined plate (its 8 loose dovetail tabs, joining it to a neighbouring base, are
+    left out). panel_x and panel_y split the plates into panels, dovetailed edge to edge, and each
+    wall into segments joined in line by fingers, t apart: the generator doesn't allow for that t,
+    so the walls come out (segments - 1)·t longer than the floor."""
+    t, h = box.thickness, box.h
+    split = bool(box.panel_x and box.panel_y)
+    cols = rows = 1
+    if split:
+        pad_x, pad_y = box.size_x - box.x * box.pitch, box.size_y - box.y * box.pitch
+        cols, rows, _ = box.subdivide_grid(box.x, box.y, (box.panel_x - pad_x) // box.pitch,
+                                           (box.panel_y - pad_y) // box.pitch)
+    if h == 0 and box.base_type == "refined" and box.exact_size:
+        parts = parts[8:]
+    n = cols * rows
+    grid, rest = parts[:n], parts[n:]
+    walls, floor = [], []
+    if h > 0 and not split:  # front, left, right, back
+        walls, rest = [rest[0], rest[3], rest[1], rest[2]], rest[4:]
+    if (h > 0 and box.bottom_edge != "e") or (h == 0 and box.base_type == "refined" and not split):
+        floor, rest = rest[:n], rest[n:]
+    if h > 0 and split:  # fronts, backs, lefts, rights
+        walls, rest = rest[:2 * (cols + rows)], rest[2 * (cols + rows):]
+    size = lambda segs: (sum(p.record.args[0] for p in segs[:cols]), sum(p.record.args[1] for p in segs[::cols]))
+    out = []
+    if walls:
+        W = sum(p.record.args[0] for p in walls[:cols]) + (cols - 1) * t
+        D = sum(p.record.args[0] for p in walls[2 * cols:2 * cols + rows]) + (rows - 1) * t
+        k = 0
+        for (o, U, side), count in zip([((0, 0, 0), X, 1), ((0, D, 0), X, -1), ((0, 0, 0), Y, -1), ((W, 0, 0), Y, 1)],
+                                       (cols, cols, rows, rows)):
+            pos = 0
+            for p in walls[k:k + count]:
+                out.append((p, Placement(_add(o, U, pos), U, Z, side)))
+                pos += p.record.args[0] + t
+            k += count
+    else:
+        W, D = size(grid)
+
+    def tiles(segs, side):  # centred in W × D, row by row from the front left
+        sx, sy = size(segs)
+        y0 = (D - sy) / 2
+        for r in range(rows):
+            x0 = (W - sx) / 2
+            for p in segs[r * cols:(r + 1) * cols]:
+                out.append(_gridfinity_plate(p, Placement((x0, y0, 0), X, Y, side)))
+                x0 += p.record.args[0]
+            y0 += segs[r * cols].record.args[1]
+
+    tiles(grid, 1)
+    if floor:
+        tiles(floor, -1)
+    return out + (_lid(box, rest, W, D, h) if rest else [])
+
+
+@recipe
+def GridfinityDrillBox(box, parts):
+    """Walls round x × y (drawn back, left, right, front: that is how the generator hands out its
+    top edges), on the bottom; a shelf plate in the walls' finger holes on top of each height of sh
+    but the last (the drill holes are for the user to add); the lid style's parts at the top; the
+    feet (plain pads) under the bottom's etched corner cells."""
+    t, x, y = box.thickness, box.x, box.y
+    h = sum(box.sh) + t * (len(box.sh) - 1)
+    ring = _walls_round(x, y)
+    out = [(w, ring[i]) for w, i in zip(parts[:4], (2, 3, 1, 0))]
+    out.append(_gridfinity_plate(parts[4], Placement((0, 0, 0), X, Y, -1)))
+    rest, z = parts[5:], 0
+    for d in box.sh[:-1]:
+        z += d
+        out.append((rest.pop(0), Placement((0, 0, z), X, Y, 1)))
+        z += t
+    feet = len(rest) - min(box.nx * box.ny, 4)
+    out += _gridfinity_feet(box, rest[feet:], -t)
+    return out + (_lid(box, rest[:feet], x, y, h) if feet else [])
+
+
+@recipe
+def GridfinityTrayLayout(box, parts):
+    """TrayLayout's tray, columns x from the left, rows y from the back as in the layout text. Each
+    line of walls is drawn as its runs of walls: the horizontal ones along +X, the vertical ones
+    from the back to the front. They stand in the base plate (drawn mirrored, with its etching
+    underneath, F's startWidth out from the inner faces); the feet (pads with magnet holes) go
+    under its etched corner cells; then the lid style's parts."""
+    t, xs, ys = box.thickness, box.x, box.y
+    lx, ly = len(xs), len(ys)
+    x0 = [sum(xs[:i]) + i * t for i in range(lx + 1)]           # column i's left: vertical wall line i is the t before it
+    y1 = [sum(ys[j:]) + (ly - j - 1) * t for j in range(ly + 1)]  # row j's back: horizontal wall line j is the t behind it
+    out, rest = [], list(parts)
+    for j in range(ly + 1):
+        out += [(rest.pop(0), Placement((x0[a], y1[j], 0), X, Z, -1)) for a, _ in _tray_layout_runs(box.hwalls[j])]
+    for i in range(lx + 1):
+        out += [(rest.pop(0), Placement((x0[i], y1[a], 0), (0, -1, 0), Z, 1))
+                for a, _ in _tray_layout_runs([row[i] for row in box.vwalls])]
+    w = box.edges["F"].startWidth()
+    out.append(_gridfinity_plate(rest.pop(0), Placement((-w, -w, 0), X, Y, -1)))
+    feet = rest[:min(box.nx * box.ny, 4)] if box.gen_pads else []
+    out += _gridfinity_feet(box, feet, -t)
+    lid = rest[len(feet):]
+    return out + (_lid(box, lid, x0[lx] - t, y1[0], box.h) if lid else [])
+
+
+def _tray_layout_runs(flags):
+    """(first, end) of each run of walls along a grid line: one wall part each."""
+    out, start = [], None
+    for i, f in enumerate(list(flags) + [False]):
+        if f and start is None:
+            start = i
+        elif not f and start is not None:
+            out.append((start, i))
+            start = None
+    return out
+
+
+def _tray_layout_plate(part, local):
+    """TrayLayout's base plate, its outline (drawn edge by edge, in no order and either way round)
+    joined into loops, as a part of its own in the plate's local frame."""
+    opens = []
+    loops = loops_of(part, local, opens)
+    while opens:
+        chain = opens.pop(0)
+        while math.dist(chain[0], chain[-1]) >= 0.2:
+            i = next((i for i, o in enumerate(opens) if min(math.dist(chain[-1], o[0]), math.dist(chain[-1], o[-1])) < 0.2), None)
+            if i is None:
+                break
+            o = opens.pop(i)
+            chain += (o if math.dist(chain[-1], o[0]) < 0.2 else o[::-1])[1:]
+        if math.dist(chain[0], chain[-1]) < 0.2:
+            loops.append(chain[:-1])
+    path = lambda l: SimpleNamespace(path=[("M", *l[0])] + [("L", *q) for q in l[1:] + l[:1]], params={})
+    return SimpleNamespace(record=part.record, pathes=[path(l) for l in loops])
+
+
+@recipe
+def TrayLayout(box, parts):
+    """TypeTray from the layout's grid: columns box.x left to right, rows box.y back to front (as in
+    the text), the front's inner face at Y = 0. Each run of walls along a grid line is one wall,
+    drawn from its first compartment: the lines along X from the back, then the lines along Y from
+    the left (u back → front); outer walls h high, inner ones hi (their fingers, or with no floor
+    their E edge, under them). Then the base plate (no floor where the layout has an X) and the lid
+    style's parts on the outer walls."""
+    t, sx, sy = box.thickness, box.x, box.y
+    xs, ys = [-t], [-t]   # each grid line's wall: its face towards X = 0 / Y = 0
+    for s in sx:
+        xs.append(xs[-1] + s + t)
+    for s in reversed(sy):
+        ys.append(ys[-1] + s + t)
+    ys = ys[::-1]         # by line, from the back
+    out = []
+    for j, flags in enumerate(box.hwalls):
+        out += [Placement((xs[a] + t, ys[j] + t, 0), X, Z, 1) for a, _ in _tray_layout_runs(flags)]
+    for i in range(len(sx) + 1):
+        out += [Placement((xs[i] + t, ys[a], 0), (0, -1, 0), Z, 1)
+                for a, _ in _tray_layout_runs(row[i] for row in box.vwalls)]
+    out = list(zip(parts, out))
+    plate = parts[len(out)]
+    w = box.edges["F"].startWidth()   # the plate's outline is w out from the walls' inner faces
+    out.append((_tray_layout_plate(plate, ~(plate.record.matrix * Affine.translation(w, w))),
+                Placement((0, 0, 0), X, Y, -1), Affine.identity()))
+    return out + _lid(box, parts[len(out):], xs[-1], ys[0], box.h)
+
+
+@recipe
+def TrayInsert(box, parts):
+    """Only the dividers, half-lapped where they cross: those along Y (slotted from the bottom)
+    after each sx, then those along X (slotted from the top) after each sy, the compartments
+    counted from X = 0 and Y = 0. render() has already widened sx and sy to fill x and y; a draft
+    angle slants the walls' ends outwards."""
+    t = box.thickness
+    out, pos = [], 0
+    for s in box.sx[:-1]:
+        pos += s
+        out.append(Placement((pos, 0, 0), Y, Z, 1))
+        pos += t
+    pos = 0
+    for s in box.sy[:-1]:
+        pos += s
+        out.append(Placement((0, pos, 0), X, Z, -1))
+        pos += t
+    return out
+
+
+@recipe
+def SlantedTray(box, parts):
+    """One row of compartments sx along X, y deep: the back wall h high, drawn upside down (its f
+    edge on the bottom's back F edge), the bottom (drawn from the back), the front front_height
+    high, and len(sx) + 1 trapezoid sides from the back (X = 0 first) sloping down to the front."""
+    t, sx, y = box.thickness, box.sx, box.y
+    back, bottom, front, *sides = parts
+    h = sides[0].record.args[1]
+    xs, pos = [0], 0
+    for s in sx:
+        pos += s + t
+        xs.append(pos)
+    return [(back, Placement((0, y, h), X, (0, 0, -1), 1)),
+            (bottom, Placement((0, y, 0), X, (0, -1, 0), 1)),
+            (front, Placement((0, 0, 0), X, Z, 1))] + \
+        [(p, Placement((x0, y, 0), (0, -1, 0), Z, 1)) for p, x0 in zip(sides, xs)]
+
+
+@recipe
+def DividerTray(box, parts):
+    """Back and front (along X, both drawn from X = 0) round the side walls (Y from the front's
+    inner face at 0 to the back's at L), on the bottom if any (drawn from the back: its handle
+    sticks out at the front). The side walls' slots, drawn along their top edge from the back,
+    lean towards the front by the slot angle; render() derived them, so they are worked out again
+    here. In every slot the divider spanning all columns hangs on its tabs, centred across the slot,
+    drawn from its top edge down. The per-column dividers are alternatives, left out."""
+    from boxes.generators.dividertray import SlotDescription, SlotDescriptionsGenerator
+    t, sx = box.thickness, box.sx
+    back, front = parts[:2]
+    w, h = back.record.args[:2]
+    sides = [p for p in parts if (p.record.label or "").startswith("Sidepiece")]
+    L = sides[0].record.args[0]
+    rest = parts[2 + len(sides):]
+    dividers = rest[len(rest) - 1 - 3 * len(sx):]   # the one spanning all columns, then 3 sets of one per column
+    lid = rest[:len(rest) - len(dividers) - box.bottom]
+    out = [(back, Placement((0, L, 0), X, Z, -1)), (front, Placement((0, 0, 0), X, Z, 1))]
+    xs = ([-t] if box.left_wall else []) + ([w] if box.right_wall else [])   # the outer ones first
+    pos = -t
+    for s in sx[:-1]:
+        pos += s + t
+        xs.append(pos)
+    out += [(p, Placement((x0 + t, 0, 0), Y, Z, -1)) for p, x0 in zip(sides, xs)]
+    out += _lid(box, lid, w, L, h)
+    if box.bottom:
+        out.append((rest[len(lid)], Placement((0, L, 0), X, (0, -1, 0), 1)))
+    slots = SlotDescriptionsGenerator().generate_all_same_angles(
+        box.sy, t, box.Slot_extra_slack, box.Slot_depth, h, box.Slot_angle, box.Slot_radius)
+    if box.outside:
+        slots.adjust_to_target_length(sum(box.sy) - 2 * t)
+    a = math.radians(box.Slot_angle)
+    down, across = (0, -math.sin(a), -math.cos(a)), (0, -math.cos(a), math.sin(a))   # along the slot, to its front
+    left = (t if box.left_wall else 0) - box.Divider_play   # the divider's tab, left of X = 0
+    height = h / math.cos(a) - t * math.tan(a) - box.Divider_bottom_margin   # as the generator draws it
+    # drawn by hand from its top left corner, which is the burn above the part's start
+    local = ~(dividers[0].record.start * Affine.translation(0, box.burn))
+    u = L
+    for s in slots.descriptions:
+        if isinstance(s, SlotDescription):
+            # the slot's back face meets the top edge round its corner; the divider's top edge is
+            # Slot_depth above the slot's bottom, its front face (its local origin) half the slack
+            # in from the slot's front face
+            top = _add((0, u - s.round_edge_start_correction(), h), down, max(0.0, s.width * math.tan(a)))
+            o = _add(_add(top, across, (s.width + t) / 2), X, -left)
+            # a negative angle makes the generator's divider too long: then it stands on the floor
+            low = o[2] - height * math.cos(a) - max(0.0, t * math.sin(a))
+            out.append((dividers[0], Placement(_add(o, down, min(0.0, low) / math.cos(a)), X, down, 1), local))
+        u -= s.tracing_length()
+    return out
+
+
+def _small_parts_dividers(s, t):
+    """Centres of the dividers between sections s (as fingerHolesAt places them), from the start."""
+    out, pos = [], -t / 2
+    for a in s[:-1]:
+        pos += a + t
+        out.append(pos)
+    return out
+
+
+@recipe
+def SmallPartsTray(box, parts):
+    """Sides y × h (the first drawn from the front, the second mirrored), the inner walls between the
+    sx compartments (polygons from the front ramp's foot), and across them: the front panel above the
+    ramp, the ramp (its top face on the sides' hole line, down from the panel to the floor at
+    ramp_y), the floor, then the back ramp and panel or, one-sided, the back wall. Two-sided: a
+    sliding divider across the middle of each compartment, standing in the slots of two triangular
+    feet (hypotenuse on the floor, slot up) in its bottom corner notches, and the lid style's parts."""
+    t, sx, y, h = box.thickness, box.sx, box.y, box.h
+    x = sum(sx) + (len(sx) - 1) * t
+    ramp_h = h * box.rampheight   # as in render()
+    ramp_y = ramp_h / math.tan(math.radians(box.angle))
+    if box.two_sided and 2 * ramp_y + 3 * t > y:
+        ramp_y = (y - 3 * t) / 2
+        ramp_h = ramp_y * math.tan(math.radians(box.angle))
+    elif ramp_y > y - t:
+        ramp_y = y - t
+        ramp_h = ramp_y * math.tan(math.radians(box.angle))
+    a = math.atan2(ramp_h, ramp_y)
+    c, s = math.cos(a), math.sin(a)
+    out = [Placement((x, 0, 0), Y, Z, 1), Placement((0, 0, 0), Y, Z, -1)]
+    out += [Placement((p - t / 2, ramp_y, 0), Y, Z, 1) for p in _small_parts_dividers(sx, t)]
+    if box.front_panel:
+        out.append(Placement((0, 0, ramp_h), X, Z, 1))
+    out += [Placement((0, ramp_y, 0), X, (0, -c, s), 1), Placement((0, ramp_y, 0), X, Y, -1)]
+    if not box.two_sided:
+        out.append(Placement((0, y, 0), X, Z, -1))
+        return list(zip(parts, out))
+    out.append(Placement((0, y - ramp_y, 0), X, (0, c, s), -1))
+    if box.front_panel:
+        out.append(Placement((0, y, ramp_h), X, Z, -1))
+    q = list(zip(parts, out))
+    rest = parts[len(out):]
+    n = len(sx)
+    yd, x0 = y / 2, 0.0
+    for i, w in enumerate(sx):
+        q.append((rest[i], Placement((x0, yd - t / 2, 0), X, Z, -1)))
+        # the feet: two right triangles sharing their hypotenuse cut, from (0, 0) to (3.5 t, 3.5 t); the
+        # second's outline is left open there, so the first, slot up, goes in at both ends
+        o, up, down = (0, yd - 2.5 * t, 0), _norm((0, 1, 1)), _norm((0, 1, -1))
+        for xf in (x0, x0 + w - t):
+            q.append((rest[n + i], Placement(_add(o, X, xf), up, down, -1, keep=lambda p: p.centroid.x > p.centroid.y)))
+        x0 += w + t
+    return q + _lid(box, rest[2 * n:], x, y, h)
+
+
+@recipe
+def SmallPartsTray2(box, parts):
+    """A type tray x × y (front at Y = 0) whose compartments' floors slope up to the front. Sides,
+    floors and inner walls are drawn from the back, the back from X = x, the holes in front, back and
+    floors at X = x - posx. Each compartment's slope (its slotted end down) rises at 45° from a gap
+    between the floor boards to hi, on the divider or the front wall in front of it; the dividers
+    stand on the floor boards."""
+    t, sx, sy = box.thickness, box.sx, box.sy
+    x = sum(sx) + (len(sx) - 1) * t
+    y = sum(sy) + (len(sy) - 1) * t
+    hi, r2 = box.hi, 2 ** 0.5
+    ends, pos = [], 0.0   # each compartment's front face, from the back
+    for s in sy:
+        pos += s
+        ends.append(pos)
+        pos += t
+    back, front = (-1, 0, 0), (0, -1, 0)
+    out = [Placement((x, y, 0), back, Z, 1), Placement((0, 0, 0), X, Z, 1)]
+    out += [Placement((x, y - start, 0), back, front, -1) for start in [0] + [e - hi + r2 * t for e in ends]]
+    out += [Placement((x, y - p - t / 2, 0), back, Z, 1) for p in _small_parts_dividers(sy, t)]
+    # a slope from its lower end's lower face, up towards the front
+    out += [Placement((x, y - e + hi - t / (2 * r2), -1.5 * t / r2), back, (0, -1 / r2, 1 / r2), 1) for e in ends]
+    out += [Placement((0, y, 0), front, Z, 1), Placement((x, y, 0), front, Z, -1)]
+    # The inner walls' slot for the front slope opens on their front edge, at its top: the outline
+    # crosses itself there and polygons_of fills it. Cut it out again.
+    sl = hi / r2 + t / 2   # as in TopEdge
+    a = (y, hi - r2 * t)
+    b = (a[0] - (sl - t) / r2, a[1] - (sl - t) / r2)
+    c = (b[0] - t / r2, b[1] + t / r2)
+    notch = Polygon([a, b, c, (y, hi), (y + 1, hi + 1), (y + 1, a[1])])
+    for p in _small_parts_dividers(sx, t):
+        place = Placement((x - p + t / 2, y, 0), front, Z, 1)
+        pieces = place.pieces
+        place.pieces = lambda polys, th, pieces=pieces: pieces([q.difference(notch) for q in polys], th)
+        out.append(place)
+    return out
+
+
+@recipe
+def CompartmentBox(box, parts):
+    """TypeTray's walls round x × y, drawn as seen from outside (the sides from the back, their
+    cutout for the lid at the front; the holes in front and back at X = x - posx), the bottom turned
+    round to match. The lid (closed) lies on the inner walls at h under the lips, which lie on the
+    side walls' tops (stackable: in the Š edge's finger holes, at the same height); the single
+    "Lip" also over the back. With a lip handle the lid ends at the front wall, its lip standing
+    on it over the front wall; otherwise it reaches over the front wall."""
+    t, sx, sy = box.thickness, box.sx, box.sy
+    walls = {p.record.label: p for p in parts}
+    x = walls["back"].record.args[0]
+    y, H = walls["left side"].record.args[:2]
+    h = walls["front"].record.args[1]
+    m = box.margin_side * t
+    place = {
+        "back": Placement((x, y, 0), (-1, 0, 0), Z, 1),
+        "front": Placement((0, 0, 0), X, Z, 1),
+        "bottom": Placement((x, y, 0), (-1, 0, 0), (0, -1, 0), -1),
+        "left side": Placement((0, y, 0), (0, -1, 0), Z, 1),
+        "right side": Placement((x, y, 0), (0, -1, 0), Z, -1),
+        "lid": Placement((m, 0 if box.handle == "lip" else -t, h), X, Y, 1, lid=True),
+        "lid lip": Placement((m, 0, h + t), X, Z, 1, lid=True),
+        "Lip Left": Placement((t, 0, H), Y, (-1, 0, 0), 1),
+        "Lip Right": Placement((x - t, 0, H), Y, X, -1),
+        None: Placement((0, y, H), (0, -1, 0), X, 1),   # the single lip, drawn by hand
+    }
+    for i, p in enumerate(_small_parts_dividers(sy, t)):
+        place[f"inner x {i + 1}"] = Placement((x, y - p - t / 2, 0), (-1, 0, 0), Z, 1)
+    for i, p in enumerate(_small_parts_dividers(sx, t)):
+        place[f"inner y {i + 1}"] = Placement((x - p + t / 2, y, 0), (0, -1, 0), Z, 1)
+    f = box.edges["f"].margin()   # the single lip's first edge starts at (f, f)
+    return [(p, place[p.record.label]) if p.record.label else
+            (p, place[None], ~(p.record.start * Affine.translation(f, f))) for p in parts]
 
 
 @recipe
