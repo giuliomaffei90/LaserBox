@@ -12,6 +12,7 @@ import argparse
 import contextlib
 import gettext
 import json
+import math
 import os
 import re
 import sys
@@ -23,6 +24,7 @@ import markdown
 from boxes.generators.traylayout import TrayLayoutFile
 
 import assembly
+from affine import Affine
 from svgpathtools import Line, parse_path
 
 TRANSLATIONS = gettext.translation("boxes.py", os.path.join(os.path.dirname(os.path.abspath(__file__)), "locale"),
@@ -33,8 +35,8 @@ boxes.ArgumentParser = type("ThrowingArgumentParser", (argparse.ArgumentParser,)
     "error": lambda self, message: (_ for _ in ()).throw(ValueError(message))})
 
 GENERATORS = {cls.__name__: cls for cls in boxes.generators.getAllBoxGenerators().values() if cls.webinterface}
-# Not offered: the reference rectangle and its QR code are never drawn (see configure).
-SKIPPED = {"input", "output", "format", "help", "reference", "qr_code"}
+# Not offered: the reference rectangle and its QR code are never drawn, debug is off (see configure).
+SKIPPED = {"input", "output", "format", "help", "reference", "qr_code", "debug"}
 # The app's own defaults where they differ from boxes.py's (the app sends only the values changed).
 DEFAULTS = {
     "CardBox": {"y": 89, "h": 17, "sx": "63.5*2", "openingdirection": "right", "fingerhole": "custom",
@@ -116,7 +118,7 @@ def generator_args(name):
 def configure(box, args):
     """The generator's arguments, and what the web form would add."""
     box.parseArgs([f"--{k}={v}" for k, v in args.items()])
-    box.reference, box.qr_code = 0, False
+    box.reference, box.qr_code, box.debug = 0, False, False
     if isinstance(box, boxes.generators.traylayout.TrayLayout) and not hasattr(box, "generate_layout"):
         # An empty layout means "every compartment from sx and sy", like the web form's first step
         # (GridfinityTrayLayout makes its own).
@@ -134,6 +136,8 @@ def render(name, args, fmt):
         configure(box, args)
         box.open()
         box.render()
+        box.ctx.stroke()  # the last path, before the parts move (close() would stroke it after)
+        pack(box.ctx._dwg.parts, box.spacing)
     except Exception as e:
         raise ValueError(translate_error(str(e), box)) from e
     data = box.close()
@@ -141,6 +145,73 @@ def render(name, args, fmt):
         raise ValueError(_("{name} doesn't draw anything").replace("{name}", tr(name)))
     svg = data.getvalue().decode()
     return svg if fmt == "svg" else svg_to_dxf(svg)
+
+
+def maxrects(sizes, width, gap):
+    """Places rectangles (w, h), largest first, in a strip `width` wide, each where its top ends
+    lowest (then leftmost), turned a quarter if that is better; gap between them. -> ([(x, y,
+    turned)], height). MaxRects: the free space is kept as maximal rectangles."""
+    free, places, top = [(0.0, 0.0, width + gap, math.inf)], [None] * len(sizes), 0.0
+    for i in sorted(range(len(sizes)), key=lambda i: -sizes[i][0] * sizes[i][1]):
+        best = None
+        for fx, fy, fw, fh in free:
+            for turned in (False, True):
+                w, h = sizes[i][::-1] if turned else sizes[i]
+                if w + gap <= fw + 1e-9 and h + gap <= fh + 1e-9 and (best is None or (fy + h, fx) < best[0]):
+                    best = ((fy + h, fx), fx, fy, turned)
+        if best is None:
+            return None, math.inf
+        _, x, y, turned = best
+        w, h = sizes[i][::-1] if turned else sizes[i]
+        places[i], top = (x, y, turned), max(top, y + h)
+        px1, py1 = x + w + gap, y + h + gap
+        split = []
+        for f in free:
+            fx, fy, fw, fh = f
+            if x >= fx + fw or px1 <= fx or y >= fy + fh or py1 <= fy:
+                split.append(f)
+                continue
+            split += [r for r in ((fx, fy, x - fx, fh), (px1, fy, fx + fw - px1, fh),
+                                  (fx, fy, fw, y - fy), (fx, py1, fw, fy + fh - py1)) if r[2] > 1e-9 and r[3] > 1e-9]
+        split = list(dict.fromkeys(split))
+        free = [a for a in split if not any(b != a and b[0] <= a[0] and b[1] <= a[1] and a[0] + a[2] <= b[0] + b[2]
+                                            and a[1] + a[3] <= b[1] + b[3] for b in split)]
+    return places, top
+
+
+BED_WEIGHT = 0.3  # how much a sheet off the bed's shape costs, per e-fold of its aspect ratio
+
+
+def pack(parts, gap):
+    """Moves the drawn parts (each as a whole, maybe turned a quarter) closer together: their
+    bounding boxes packed `gap` apart (the generator's spacing) in the strip width, among some
+    tried, that gives the smallest sheet, shaped like a laser's bed (3:2, landscape): area weighed by
+    how far the shape is from it. Kept as drawn unless that scores better."""
+    parts = [p for p in parts if p.pathes]
+    boxes_ = [p.extents() for p in parts]
+    if len(parts) < 2:
+        return
+    sizes = [(e.width, e.height) for e in boxes_]
+    drawn = sum(boxes_[1:], boxes_[0])
+    widest, total = max(max(s) for s in sizes), sum(min(s) + gap for s in sizes)
+    def score(w, h):
+        return w * h * (1 + BED_WEIGHT * abs(math.log(w / h / 1.5)))
+
+    best = (score(drawn.width, drawn.height) * (1 - 1e-6), None)
+    for k in range(25):
+        width = widest * (max(total, widest) / widest) ** (k / 24)
+        places, height = maxrects(sizes, width, gap)
+        if places is None:
+            continue
+        used = max(x + (s[1] if turned else s[0]) for (x, y, turned), s in zip(places, sizes))
+        if (area := score(used, height)) < best[0]:
+            best = (area, places)
+    if best[1] is None:
+        return
+    for p, e, (x, y, turned) in zip(parts, boxes_, best[1]):
+        m = (Affine.translation(x + e.ymax, y - e.xmin) * Affine.rotation(90) if turned
+             else Affine.translation(x - e.xmin, y - e.ymin))
+        p.transform(1.0, m)
 
 
 def translate_error(message, box):
@@ -226,6 +297,8 @@ if __name__ == "__main__":
         svg = render("UniversalBox", {"x": "120"}, "svg")
         assert svg.startswith("<?xml") and "<path" in svg
         assert "burn:" not in render("UniversalBox", {"reference": "100", "qr_code": "1"}, "svg")  # no reference
+        w, h = map(float, re.search(r'viewBox="[\d.]+ [\d.]+ ([\d.]+) ([\d.]+)"', render("UniversalBox", {}, "svg")).groups())
+        assert 1.3 < w / h < 1.7, (w, h)  # five squares drawn 2 × 3 upright, packed 3 × 2 across
         dxf = svg_to_dxf(svg)
         assert dxf.count("\nLINE\n") > 50 and dxf.endswith("EOF\n")
         try:
