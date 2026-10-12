@@ -399,12 +399,38 @@ struct AssemblyView: NSViewRepresentable {
     func makeCoordinator() -> AssemblyStage { AssemblyStage() }
 }
 
+/// A gallery card: a scene GalleryScenes built, only attached and turned here.
+struct StageView: NSViewRepresentable {
+    let stage: AssemblyStage
+    var yaw: CGFloat = 0
+    var pitch: CGFloat = 0
+
+    func makeNSView(context: Context) -> SCNView {
+        let view = SCNView()
+        view.autoenablesDefaultLighting = false
+        view.antialiasingMode = .multisampling4X
+        view.backgroundColor = .clear
+        view.scene = stage.scene
+        view.pointOfView = stage.camera
+        return view
+    }
+
+    func updateNSView(_ view: SCNView, context: Context) {
+        if view.scene !== stage.scene {
+            view.scene = stage.scene
+            view.pointOfView = stage.camera
+        }
+        stage.spin.eulerAngles = SCNVector3(pitch, stage.turn + yaw, 0)
+    }
+}
+
 /// An assembled box's scene: lights, camera and the pieces under `spin`. It has nothing to do with
 /// the interface, so the gallery builds and renders its pictures off the main thread.
 final class AssemblyStage {
     var key = ""
     var optional: [(node: SCNNode, piece: Piece)] = []  // lids and decorations, shown or hidden
     var size: CGFloat = 0
+    var turn: CGFloat = 0   // the gallery's yaw for this box
     let scene = SCNScene()
     let spin = SCNNode()
     let camera = SCNNode()
@@ -487,17 +513,15 @@ final class AssemblyStage {
         sun.look(at: SCNVector3Zero)
     }
 
-    /// The gallery's picture of a box, as its live card shows it before it's turned: MDF, lids left
-    /// out unless the box asks for them, turned by the box's `turn`.
-    static func galleryPicture(of assembly: Assembly, pixels: CGFloat) -> NSImage {
+    /// A gallery card's scene: MDF, lids left out unless the box asks for them, framed for the card,
+    /// turned by the box's `turn`.
+    static func gallery(_ assembly: Assembly) -> AssemblyStage {
         let stage = AssemblyStage()
         let size = stage.build(assembly, material: .standard, decorations: true, lids: assembly.galleryLids ?? false, all: false)
         stage.frame(size: size, interactive: false)
-        stage.spin.eulerAngles = SCNVector3(0, (assembly.turn ?? 0) * .pi / 180, 0)
-        let renderer = SCNRenderer(device: MTLCreateSystemDefaultDevice(), options: nil)
-        renderer.scene = stage.scene
-        renderer.pointOfView = stage.camera
-        return renderer.snapshot(atTime: 0, with: CGSize(width: pixels, height: pixels), antialiasingMode: .multisampling4X)
+        stage.turn = (assembly.turn ?? 0) * .pi / 180
+        stage.spin.eulerAngles = SCNVector3(0, stage.turn, 0)
+        return stage
     }
 
     /// Decoration kinds (assembly.py) and their look.

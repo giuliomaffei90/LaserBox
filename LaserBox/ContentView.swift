@@ -160,38 +160,23 @@ struct GeneratorCard: View {
                 .aspectRatio(1, contentMode: .fit)
                 .overlay {
                     if let model {
-                        // The rendered picture; live only once it's being turned, so scrolling (the pointer
-                        // passing over cards) never builds a 3D scene.
-                        let live = yaw != 0 || pitch != 0 ? model.galleryAssemblies[generator.name] : nil
-                        ZStack {
-                            if let assembly = live {
-                                AssemblyView(assembly: assembly, key: generator.name, lids: assembly.galleryLids ?? false, interactive: false,
-                                             yaw: yaw + (assembly.turn ?? 0) * .pi / 180, pitch: pitch)
-                            } else if let picture = model.galleryPictures[generator.name] {
-                                Image(nsImage: picture).resizable().scaledToFit()
+                        Group {
+                            if let stage = model.galleryStages[generator.name] {
+                                StageView(stage: stage, yaw: yaw, pitch: pitch)
                             } else {
                                 ProgressView()
                             }
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background(.fill.tertiary)
-                        .task { await model.loadGalleryPicture(generator.name) }
-                        .onChange(of: hovering) {
-                            if !hovering && dragStart == nil { yaw = 0; pitch = 0 }
-                        }
+                        .task { await model.loadGalleryStage(generator.name) }
                         // Drag turns the box; a plain click opens it.
                         .contentShape(.rect)
                         .gesture(DragGesture(minimumDistance: 3).onChanged { value in
-                            if dragStart == nil {
-                                dragStart = (yaw, pitch)
-                                Task { await model.loadGalleryAssembly(generator.name) }
-                            }
+                            if dragStart == nil { dragStart = (yaw, pitch) }
                             yaw = dragStart!.0 + value.translation.width / 80
                             pitch = max(-1.2, min(1.2, dragStart!.1 + value.translation.height / 120))
-                        }.onEnded { _ in
-                            dragStart = nil
-                            if !hovering { yaw = 0; pitch = 0 }
-                        })
+                        }.onEnded { _ in dragStart = nil })
                         .onTapGesture { open?() }
                     } else {
                         SampleImage(name: generator.name)

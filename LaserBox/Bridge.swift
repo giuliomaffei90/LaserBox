@@ -37,7 +37,7 @@ struct Choice: Decodable {
 /// One flat piece of the assembled box: polygon rings in mm (first ring outer, the rest holes),
 /// extruded by t along side·(u×v) and placed at origin. `lid` marks a lid; `decoration` (its kind) other pieces
 /// the view can hide: what goes in the box but isn't cut, removable panels.
-struct Piece: Decodable {
+struct Piece: Codable {
     let rings: [[[Double]]]
     let origin, u, v: [Double]
     let side: Int
@@ -47,7 +47,7 @@ struct Piece: Decodable {
     var clear: Bool?  // always clear acrylic, whatever the material (a display case's glass)
 }
 
-struct Assembly: Decodable {
+struct Assembly: Codable {
     let pieces: [Piece]
     var turn: Double?  // degrees about the vertical the gallery shows it turned by
     var galleryLids: Bool?  // the gallery shows its lids (it leaves them out otherwise)

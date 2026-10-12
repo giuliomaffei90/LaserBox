@@ -1,6 +1,7 @@
 import AppKit
 import CryptoKit
 import Observation
+import SceneKit
 
 @Observable @MainActor
 final class BoxModel {
@@ -22,11 +23,9 @@ final class BoxModel {
     var error: String?
     var isRendering = false
     var startupError: String?
-    /// Assembled boxes with default parameters, for the gallery cards.
-    var galleryAssemblies: [String: Assembly] = [:]
-    /// The gallery cards' pictures of them (see GalleryPictures).
-    var galleryPictures: [String: NSImage] = [:]
-    /// The pictures being prepared at launch, done of all; nil once the gallery can show.
+    /// The gallery cards' 3D scenes, boxes with default parameters (see GalleryScenes).
+    var galleryStages: [String: AssemblyStage] = [:]
+    /// The scenes being prepared at launch, done of all; nil once the gallery can show.
     var preparing: (done: Int, of: Int)?
 
     /// Values the user changed, per generator, so switching box type and back keeps them.
@@ -46,20 +45,19 @@ final class BoxModel {
         await prepareGallery()
     }
 
-    /// Every 3D card's picture, ready before the gallery shows and kept for the whole session: from
-    /// disk, or rendered (and kept there). A few at a time, so Python assembles the next boxes while
-    /// SceneKit draws one.
+    /// Every 3D card's scene, ready before the gallery shows and kept for the whole session. A few at
+    /// a time, so Python assembles the next boxes while SceneKit builds one.
     private func prepareGallery() async {
         let names = Set(groups.flatMap(\.generators).filter(\.assembled).map(\.name)).sorted()
         preparing = (0, names.count)
         await withTaskGroup(of: Void.self) { group in
             var next = names.makeIterator()
             for _ in 0..<3 {
-                if let name = next.next() { group.addTask { await self.loadGalleryPicture(name) } }
+                if let name = next.next() { group.addTask { await self.loadGalleryStage(name) } }
             }
             for await _ in group {
                 preparing?.done += 1
-                if let name = next.next() { group.addTask { await self.loadGalleryPicture(name) } }
+                if let name = next.next() { group.addTask { await self.loadGalleryStage(name) } }
             }
         }
         preparing = nil
@@ -85,27 +83,16 @@ final class BoxModel {
         scheduleRender(delay: .zero)
     }
 
-    func loadGalleryAssembly(_ name: String) async {
-        guard let bridge, galleryAssemblies[name] == nil, !Task.isCancelled else { return }
-        if let assembly = try? await bridge.assemble(name, args: [:]) {
-            galleryAssemblies[name] = assembly
+    /// A card's scene: its box from disk, or from Python (and kept on disk), built off the main thread.
+    func loadGalleryStage(_ name: String) async {
+        guard galleryStages[name] == nil else { return }
+        var assembly = await GalleryScenes.shared.cached(name)
+        if assembly == nil, let bridge, let fresh = try? await bridge.assemble(name, args: [:]) {
+            assembly = fresh
+            await GalleryScenes.shared.keep(fresh, as: name)
         }
-    }
-
-    /// A card's picture, from disk or rendered. A card scrolled away (its task cancelled) gives up its
-    /// turn, so the ones on screen don't wait behind all those scrolled past.
-    func loadGalleryPicture(_ name: String) async {
-        guard galleryPictures[name] == nil else { return }
-        if let picture = await GalleryPictures.shared.cached(name) {
-            galleryPictures[name] = picture
-            return
-        }
-        guard !Task.isCancelled else { return }
-        await loadGalleryAssembly(name)
-        guard !Task.isCancelled, let assembly = galleryAssemblies[name] else { return }
-        if let picture = await GalleryPictures.shared.render(name, assembly) {
-            galleryPictures[name] = picture
-        }
+        guard let assembly else { return }
+        galleryStages[name] = await GalleryScenes.shared.stage(for: assembly)
     }
 
     /// The cut file in the given format ("svg" or "dxf") for the current settings.
@@ -161,25 +148,23 @@ final class BoxModel {
 }
 
 
-/// The gallery's 3D cards as pictures, rendered one at a time off the main thread and kept on disk:
-/// a live SceneKit view per card made scrolling stutter. A card turns live only while it's turned.
-actor GalleryPictures {
-    static let shared = GalleryPictures()
-    /// Bump when the pictures' look changes (lights, materials, framing).
-    private static let look = 1
+/// The gallery's 3D cards, built before the gallery shows: each box's scene made, its shapes
+/// triangulated and uploaded, off the main thread, so a card scrolling into view only attaches it
+/// (a card building its scene on the main thread made scrolling stutter). The boxes are kept on disk
+/// as long as the code that makes them is the same, so later launches skip Python.
+actor GalleryScenes {
+    static let shared = GalleryScenes()
     private let folder: URL
+    private let renderer = SCNRenderer(device: MTLCreateSystemDefaultDevice(), options: nil)
 
     init() {
         let root = URL.cachesDirectory.appending(path: Bundle.main.bundleIdentifier ?? "LaserBox").appending(path: "Gallery")
-        // The pictures hold as long as the boxes come out the same: the assembly code, the app's
-        // defaults and the look. Other pictures go.
-        var hash = SHA256()
+        var hash = SHA256()   // the assembly code and the app's defaults decide the boxes
         for file in ["assembly.py", "bridge.py"] {
             if let url = Bundle.main.url(forResource: file, withExtension: nil), let data = try? Data(contentsOf: url) {
                 hash.update(data: data)
             }
         }
-        hash.update(data: Data("\(Self.look)".utf8))
         let stamp = hash.finalize().prefix(8).map { String(format: "%02x", $0) }.joined()
         folder = root.appending(path: stamp)
         let files = FileManager.default
@@ -189,19 +174,19 @@ actor GalleryPictures {
         try? files.createDirectory(at: folder, withIntermediateDirectories: true)
     }
 
-    func cached(_ name: String) -> NSImage? {
-        NSImage(contentsOf: file(name))
+    func cached(_ name: String) -> Assembly? {
+        (try? Data(contentsOf: file(name))).flatMap { try? JSONDecoder().decode(Assembly.self, from: $0) }
     }
 
-    func render(_ name: String, _ assembly: Assembly) -> NSImage? {
-        guard !Task.isCancelled else { return nil }   // its card was scrolled away while it waited
-        let picture = AssemblyStage.galleryPicture(of: assembly, pixels: 640)
-        if let tiff = picture.tiffRepresentation,
-           let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
-            try? png.write(to: file(name))
-        }
-        return picture
+    func keep(_ assembly: Assembly, as name: String) {
+        try? JSONEncoder().encode(assembly).write(to: file(name))
     }
 
-    private func file(_ name: String) -> URL { folder.appending(path: name + ".png") }
+    func stage(for assembly: Assembly) -> AssemblyStage {
+        let stage = AssemblyStage.gallery(assembly)
+        _ = renderer.prepare(stage.scene, shouldAbortBlock: nil)
+        return stage
+    }
+
+    private func file(_ name: String) -> URL { folder.appending(path: name + ".json") }
 }
