@@ -4040,7 +4040,7 @@ def RobotArm(box, parts):
 WALLS = {
     **{name: (lambda box: box.thickness) for name in (
         "WallConsole", "WallHook", "WallCaliper", "WallSlottedHolder", "WallChiselHolder", "WallPliersHolder",
-        "WallWrenchHolder", "WallHopper", "RollHolder", "WallRollHolder", "KeyHolder")},
+        "WallWrenchHolder", "WallHopper", "RollHolder", "WallRollHolder", "KeyHolder", "Hook")},
     "WallPinRow": lambda box: 0.0,
     "WallPlaneHolder": lambda box: 0.0,
     "WallStairs": lambda box: box.y,
@@ -4592,6 +4592,1485 @@ def FlexTest2(box, parts):
     return [Placement((0, 0, 0), X, Z, 1, bends=[(0, box.x, 90, box.x / (math.pi / 2))])]
 
 
+# ---------------------------------------------------------------- misc
+
+# ---------------------------------------------------------------- spools, gauge, arcade, power supply
+
+def _spool_staves(staves, n, apothem, t, R):
+    """The staves of a spool round the axle (along X, at Y = 0, Z = R): stave k on the flange's finger
+    holes at 90° + k·360/n (the flange drawn x → Y, y → Z), its inner face at the polygon's apothem,
+    its thickness outwards, v along the axle from the flange at X = 0."""
+    side, out = 2 * math.tan(math.pi / n) * apothem, []
+    for k, stave in enumerate(staves):
+        phi = math.radians(90 + k * 360 / n)
+        radial, tangent = (0, math.cos(phi), math.sin(phi)), (0, math.sin(phi), -math.cos(phi))
+        out.append((stave, Placement(_add(_add((0, 0, R), radial, apothem), tangent, -side / 2), tangent, X, -1)))
+    return out
+
+
+@recipe
+def Spool(box, parts):
+    """Lying on its flanges' rims, the axle along X at Z = R: the flanges outside X = 0 and X = h,
+    the n staves of the polygonal core between them on their finger holes (the first one up, the
+    flange drawn x → Y, y → Z), thickness outwards. With reinforcements: on each flange's outer face
+    a ring of ribs (their stepped edge on the flange's radial finger holes, the plain middle over the
+    staves' fingers), a small disc on the ribs' other edge, the first ribs on the left flange."""
+    t, n, R, H = box.thickness, box.sides, box.outer_diameter / 2, box.h
+    _, apothem, _ = box.regularPolygon(n, radius=box.inner_diameter / 2)
+    out = [(parts[0], Placement((0, 0, R), Y, Z, -1)), (parts[1], Placement((H, 0, R), Y, Z, 1))]
+    out += _spool_staves(parts[2:2 + n], n, apothem, t, R)
+    if box.reinforcement_height:
+        m, w = box.reinforcements, box.reinforcement_height - t
+        ribs = parts[2 + n:2 + n + 2 * m]
+        for j, rib in enumerate(ribs):
+            th = math.radians(j % m * 360 / m)
+            radial = (0, math.cos(th), math.sin(th))
+            x0, U = (-t, (-1, 0, 0)) if j < m else (H + t, X)
+            n_ = _cross(U, radial)
+            at = _add(_add((x0, 0, R), radial, box.axle_diameter / 2), n_, -t / 2)
+            out.append((rib, Placement(at, U, radial, 1)))
+        discs = parts[2 + n + 2 * m:]
+        out += [(discs[0], Placement((-t - w, 0, R), Y, Z, -1)), (discs[1], Placement((H + t + w, 0, R), Y, Z, 1))]
+    return out
+
+
+@recipe
+def FilamentSpool(box, parts):
+    """Like Spool, the axle along X at Z = R: the flange with the staves' finger holes outside X = 0,
+    the staves h − t long on it, the polygon (the bayonet's upper layer, as upperCB draws it) on
+    their tops, its fingers between theirs. As the generator says, the outer parts of the latch
+    belong to the core: the outer ring of the lower layer glued under the polygon. The inner parts
+    belong to the other flange (outside X = h): the plain inner ring of the upper layer in the
+    polygon's hole, the lugged inner ring of the lower layer under it, inside the core. The polygon
+    is drawn with its first side down: it, the lower layer and the second flange are turned half
+    round (their alignment holes together), so that side is up, on the first stave."""
+    t, n, R, H = box.thickness, box.sides, box.outer_diameter / 2, box.h
+    _, apothem, _ = box.regularPolygon(n, radius=box.inner_diameter / 2)  # already reduced by render
+    flange, other, polygon, lower = parts[:4]
+    ring = min(_part_polys(polygon), key=lambda q: q.area)  # the inner ring: centred on the polygon
+    c = ring.centroid
+    poly_frame = Affine.rotation(180) * Affine.translation(-c.x, -c.y) * local_matrix(polygon.record)
+    out = [(flange, Placement((0, 0, R), Y, Z, -1)),
+           (polygon, Placement((H - t, 0, R), Y, Z, 1), poly_frame),
+           (lower, Placement((H - 2 * t, 0, R), Y, Z, 1), _turned_frame(lower, 180)),
+           (other, Placement((H, 0, R), Y, Z, 1), _turned_frame(other, 180))]
+    return out + _spool_staves(parts[4:4 + n], n, apothem, t, R)
+
+
+@recipe
+def DrillGauge(box, parts):
+    """The gauge lying flat."""
+    return [Placement((0, 0, 0), X, Y, 1)]
+
+
+def _drillgauge_slot(box):
+    """[(size, centre of its stretch of the slot)] in the gauge's frame, as gauge() steps it."""
+    t, fs, sizes = box.thickness, box.fontsize, box.sizes
+    x = (5 * fs if box.text_placement == "left" else 3 * t) + max(sizes) / 2
+    y, last, out = 3 * t, 0.0, []
+    for s in sizes:
+        y += abs(s - last) / 2
+        length = max(fs / 2, s / 2)
+        out.append((s, (x, y + length / 2)))
+        y += length
+        last = s
+    return out
+
+
+@decoration("DrillGauge", "hss")
+def _drillgauge_bits(box):
+    """Three drill bits standing in the slot where it fits them (a small, a middle, the biggest
+    size): flutes below, the bright shank above."""
+    slot = _drillgauge_slot(box)
+    out = []
+    for s, c in (slot[len(slot) // 6], slot[len(slot) // 2], slot[-1]):
+        L = 30 + 4 * s
+        out += _rod("hss", (0, 0, 0), Z, X, c, s / 2, 0, 0.6 * L, segs=8)
+        out += _rod("steel", (0, 0, 0), Z, X, c, s / 2, 0.6 * L, L, segs=8)
+    return out
+
+
+MAKITA_BATTERY = (76, 115, 60)  # a Makita 18 V battery's width, length, height (no dimensions in the generator)
+
+
+def _makita_z0(box):
+    """The box's inner floor: the bottom over the battery rails (hm deep, as render() draws them)."""
+    return 15.5 + box.thickness
+
+
+@recipe
+def MakitaPowerSupply(box, parts):
+    """The box x × y × h as ClosedBox (front at Y = 0 with the sockets, back with the vents, the top
+    with the display's window near the back) raised on the two battery rails: each stands under the
+    bottom on its finger holes (m ∓ (30.5 + t/2) from the left, from 10 to 10 + l), its 60° end to the
+    back; the second layer of each rail (side2, no joints) glued on its outer face."""
+    t, x, y, h = box.thickness, box.x, box.y, box.h
+    z0, m = _makita_z0(box), x / 2
+    front, left, right, back, bottom, top, rail1, rail2, layer1, layer2 = parts
+    out = [(front, Placement((0, 0, z0), X, Z, 1)), (left, Placement((0, 0, z0), Y, Z, -1)),
+           (right, Placement((x, 0, z0), Y, Z, 1)), (back, Placement((0, y, z0), X, Z, -1)),
+           (bottom, Placement((0, 0, z0), X, Y, -1)), (top, Placement((0, 0, z0 + h), X, Y, 1))]
+    down = (0, 0, -1)
+    for rail, layer, xc, outside in ((rail1, layer1, m - 30.5 - t / 2, -1), (rail2, layer2, m + 30.5 + t / 2, 1)):
+        out.append((rail, Placement((xc - t / 2, 10, z0), down, Y, 1)))
+        out.append((layer, Placement((xc + outside * t - t / 2, 10, z0 - t), down, Y, 1)))
+    return out
+
+
+@decoration("MakitaPowerSupply", "grip-black")
+def _makita_vitamins(box):
+    """What it is built round: the battery under the rails, the DSP5005's bezel on the display window
+    (its screen, its knob), the banana sockets (black, red) and the flip switch in the front's holes."""
+    t, x, y, h = box.thickness, box.x, box.y, box.h
+    z0, (bw, bl, bh) = _makita_z0(box), MAKITA_BATTERY
+    zt, cy = z0 + h + t, y - 25
+    out = _solid("grip-black", Placement((x / 2 - bw / 2, y / 2 - bl / 2, -bh), X, Y, 1), rect(0, 0, bw, bl), bh)
+    out += _solid("grip-black", Placement((0, 0, zt), X, Y, 1), rect(x / 2 - 40, cy - 22, x / 2 + 40, cy + 22), 2)
+    out += _solid("lcd", Placement((0, 0, zt + 2), X, Y, 1), rect(x / 2 - 36, cy - 16, x / 2 + 10, cy + 16), 0.2)
+    out += _rod("steel", (0, 0, zt + 2), Z, X, (x / 2 + 26, cy + 10), 6, 0, 12)
+    zc, r = z0 + h / 2, box.banana_socket_diameter / 2 + 3
+    out += _rod("grip-black", (0, 0, 0), (0, -1, 0), X, (10, zc), r, t, t + 16)
+    out += _rod("grip-red", (0, 0, 0), (0, -1, 0), X, (30, zc), r, t, t + 16)
+    if box.secondary_power != "none":
+        out += _rod("steel", (0, 0, 0), (0, -1, 0), X, (50, zc), 1.5, t, t + 12, segs=6)
+    return out
+
+
+def _arcade_side(box):
+    """side()'s turtle, in the side's frame: {row: (start, angle°)} for each row of finger holes (the
+    middle of the slot the panel stands in) and the monitor's opening as ("monitor", (start, angle°,
+    length)) along the outline."""
+    t, r = box.thickness, 10
+    d30 = 2 * r * math.tan(math.radians(15))
+    pos, a = [r + (box.front + t) * math.sin(math.radians(15)), 0.0], [0.0]
+    rows = {}
+
+    def dirs():
+        c, s = math.cos(math.radians(a[0])), math.sin(math.radians(a[0]))
+        return (c, s), (-s, c)
+
+    def holes(name, x, y, angle):
+        d, n = dirs()
+        rows[name] = ((pos[0] + x * d[0] + y * n[0], pos[1] + x * d[1] + y * n[1]), a[0] + angle)
+
+    def line(*steps):  # polyline: lengths, corners (angle or (angle, radius)) between
+        for i, k in enumerate(steps):
+            d, n = dirs()
+            if i % 2 == 0:
+                pos[0] += k * d[0]
+                pos[1] += k * d[1]
+                continue
+            ang, rad = k if isinstance(k, tuple) else (k, 0)
+            phi = math.radians(ang)
+            fwd, sideways = rad * math.sin(abs(phi)), rad * (1 - math.cos(phi)) * (1 if ang > 0 else -1)
+            pos[0] += fwd * d[0] + sideways * n[0]
+            pos[1] += fwd * d[1] + sideways * n[1]
+            a[0] += ang
+
+    holes("floor", 10, r + t / 2, 0)
+    line(box.y, (90, r))
+    holes("back low", 0.5 * t, r + t / 2, 0)
+    holes("back high", box.h - 80, r + t / 2, 0)
+    line(box.h, (45, r))
+    holes("top back", 0, r + t / 2, 0)
+    holes("top", box.topback + t / 2, r + t, 90)
+    holes("speaker", box.topback, box.top + r + 1.5 * t, -180)
+    line(box.topback + t, (90, r), box.top + 2 * t, (90, r), 100 - 2 * r, (-90, r))
+    rows["monitor"] = (tuple(pos), a[0], box.monitor_height - 2 * r - d30)
+    line(box.monitor_height - 2 * r - d30, (-30, r))
+    holes("keyboard", -d30 + t, r + 0.5 * t, 0)
+    holes("key back", -d30 + 0.5 * t, r + t, 90)
+    holes("front", box.keyboard_depth - d30 + 1.5 * t, r + t, 90)
+    return rows
+
+
+def _arcade_panel(start, angle, t, length=0.0, flip=False):
+    """A panel width wide across X, standing in the sides' slot from start along angle (in the
+    sides' frame: u → Y, v → Z): v from start, centred on the slot. flip: v from the slot's other
+    end (length further), back along it."""
+    if flip:
+        start = (start[0] + length * math.cos(math.radians(angle)), start[1] + length * math.sin(math.radians(angle)))
+        angle += 180
+    c, s = math.cos(math.radians(angle)), math.sin(math.radians(angle))
+    return Placement((0, start[0] + t / 2 * s, start[1] - t / 2 * c), X, (0, c, s), 1)
+
+
+@recipe
+def Arcade(box, parts):
+    """The two sides at X = -t..0 and width..width + t (their u → Y, front at small Y, v up), every
+    panel between them in the slot side() draws for it, as long as the finger holes run. Where a
+    panel's joint edge (f) and the holes' direction disagree, the panel is turned end for end so
+    its f meets the neighbour's F: the front (f up at the keyboard), the speaker panel (f at the
+    marquee's front, the speakers near it) and the top back (f at the marquee's front). The back
+    cover (no joints) is screwed outside the two back strips, from the lower one's foot up.
+    side() first cuts the outline without its rounded corners, r = 10 inside the real one (which
+    would cut the side into a frame and a panel): that path is left out."""
+    t, w = box.thickness, box.width
+    rows = _arcade_side(box)
+    panels = {0: ("floor", box.bottom, False), 1: ("back low", box.back, False), 3: ("back high", box.back, False),
+              4: ("front", box.front, True), 5: ("keyboard", box.keyboard_depth, False),
+              6: ("key back", box.keyback, False), 7: ("speaker", box.speaker, True), 8: ("top", box.top, False),
+              9: ("top back", box.topback, True)}
+    out = [(parts[i], _arcade_panel(*rows[name], t, length, flip)) for i, (name, length, flip) in panels.items()]
+    (u, v), angle = rows["back low"]
+    out.append((parts[2], _arcade_panel((u + t, v), angle, t)))
+    for side, x0, s in ((parts[10], 0, -1), (parts[11], w, 1)):
+        out.append((SimpleNamespace(record=side.record, pathes=side.pathes[1:]), Placement((x0, 0, 0), Y, Z, s)))
+    return out
+
+
+@decoration("Arcade", "grip-black")
+def _arcade_vitamins(box):
+    """The monitor in the opening between the speaker panel and the keyboard (its face on the panels'
+    inner plane, r + t inside the outline, 20 deep, the screen 15 in from its edges), and on the keyboard, which the generator leaves
+    without holes, a joystick and three buttons for each player."""
+    t, w, kd = box.thickness, box.width, box.keyboard_depth
+    rows = _arcade_side(box)
+    (u, v), angle, L = rows["monitor"]
+    c, s = math.cos(math.radians(angle)), math.sin(math.radians(angle))
+    n = (-s, c)  # into the cabinet
+    face = (0, u + (10 + t) * n[0], v + (10 + t) * n[1])
+    out = _solid("grip-black", Placement(face, X, (0, c, s), 1), rect(0, 0, w, L), 20)
+    out += _solid("lcd", Placement(_add(face, (0, n[0], n[1]), -0.3), X, (0, c, s), 1), rect(15, 15, w - 15, L - 15), 0.3)
+    (u, v), angle = rows["keyboard"]
+    c, s = math.cos(math.radians(angle)), math.sin(math.radians(angle))
+    up = (0, s, -c)
+    top = _add((0, u, v), up, t / 2)
+
+    def on_top(kind, x, y, r, z, height):
+        return _solid(kind, Placement(_add(top, up, z), X, (0, c, s), -1), Point(x, y).buffer(r, quad_segs=8), height)
+
+    for x0 in (w / 4 - 50, 3 * w / 4 - 50):  # the joystick, the buttons 45 to 105 right of it
+        out += on_top("steel", x0, kd / 2, 4, 0, 30) + on_top("grip-red", x0, kd / 2, 12, 30, 18)
+        for k, kind in enumerate(("grip-red", "grip-yellow", "grip-yellow")):
+            out += on_top(kind, x0 + 45 + 30 * k, kd / 2 + (8 if k == 1 else -8), 11, 0, 6)
+    return out
+
+
+@recipe
+def Folder(box, parts):
+    """A book cover standing like a book, y high: the front cover at Y = 0 (its outside to the front)
+    from X = x to X = 0, the flex spine bent 180° on the left, the back cover behind it going back
+    to X = x. The part is drawn outside any move(), in sheet coordinates: the outline starts at
+    u = t, the first cover reaches u = x + t, then the spine, π h long. Bent with the spine's
+    middle line π h long: radius h."""
+    t, x, y, h = box.thickness, box.x, box.y, box.h
+    u0, c = x + t, math.pi * h
+    r = h - t / 2                               # the inner face: the middle line is c long
+    return [Placement((x + t, 0, y + t), (-1, 0, 0), (0, 0, -1), 1, bends=[(u0, u0 + c, 180, r)])]
+
+
+@recipe
+def BottleTag(box, parts):
+    """The tag lying level round the bottle's neck (see _bottletag_bottle), the neck through its hole,
+    its long end to the front. Drawn outside any move(), in sheet coordinates: the hole's centre
+    is at (width / 2, height - width / 2)."""
+    w, hgt = box.width, box.height
+    cx, cy = w / 2, hgt - w / 2
+    return [Placement((-cx, -cy, BOTTLETAG_Z), X, Y, 1)]
+
+
+BOTTLETAG_Z = 150  # the tag's height on the bottle: where the shoulder meets the neck
+
+
+@decoration("BottleTag", "bottle-amber")
+def _bottletag_bottle(box):
+    """A bottle whose neck fits the tag's inner hole (min_diameter): a body 3.2 × the neck across,
+    the shoulder in steps up to the tag, the neck on above it, a steel cap."""
+    rn = box.min_diameter / 2
+    rb, out = 3.2 * rn, []
+    z_sh = BOTTLETAG_Z - 2.5 * rn               # where the shoulder starts
+    out += _rod("bottle-amber", (0, 0, 0), Z, X, (0, 0), rb, 0, z_sh)
+    steps = 5
+    for j in range(steps):
+        r = rn + (rb - rn) * math.cos(math.pi / 2 * (j + 0.5) / steps)
+        out += _rod("bottle-amber", (0, 0, 0), Z, X, (0, 0), r, z_sh + j * 2.5 * rn / steps,
+                    z_sh + (j + 1) * 2.5 * rn / steps)
+    out += _rod("bottle-amber", (0, 0, 0), Z, X, (0, 0), rn, BOTTLETAG_Z, BOTTLETAG_Z + 2.2 * rn)
+    out += _rod("steel", (0, 0, 0), Z, X, (0, 0), rn + 1.5, BOTTLETAG_Z + 2.2 * rn, BOTTLETAG_Z + 2.8 * rn)
+    return out
+
+
+@recipe
+def AngledCutJig(box, parts):
+    """The base (30 + x + 2t by y) on the floor, two pairs of upright triangles in its finger holes
+    (4.5 t in from the front and back): the big ones (x by x / tan(angle)) on the right, their
+    right angle at the right, X = 30 + t + x; the small ones (20 by 20 tan(angle)) on the left,
+    turned round, their right angle at X = 10 - t. On their hypotenuses, which meet in a V near
+    X = 30, the two plates the work lies on (l and l2 long, y wide), at right angles to each other.
+    Each pair of triangles is drawn in one part, the second turned half round."""
+    t, x, y, a = box.thickness, box.x, box.y, math.radians(box.angle)
+    base, plate, plate2, big, small = parts
+    b = math.atan2(x / math.tan(a), x)             # the big plate's slope: 90° - angle
+    out = [(base, Placement((0, 0, t), X, Y, -1)),
+           (plate, Placement((30 + t, 0, t), (math.cos(b), 0, math.sin(b)), Y, 1)),
+           (plate2, Placement((30 - t, 0, t), (-math.cos(a), 0, math.sin(a)), Y, -1))]
+    for tri, x0, U, s in ((big, 30 + t, X, -1), (small, 30 - t, (-1, 0, 0), 1)):
+        keep, frames = _angledcutjig_pair(tri)
+        out += [(tri, Placement((x0, y0 - t / 2, t), U, Z, s, keep=keep), f)
+                for f, y0 in zip(frames, (4.5 * t, y - 4.5 * t))]
+    return out
+
+
+def _angledcutjig_pair(tri):
+    """A pair of triangles drawn in one part, the second turned half round: (keep, [two local
+    frames]), the second frame bringing the second triangle onto the first, whose place it keeps."""
+    pieces = _part_polys(tri)
+    first = min(pieces, key=lambda q: q.bounds[1])          # its fingers below its base line
+    second = max(pieces, key=lambda q: q.bounds[1])
+    c1, c2 = first.envelope.centroid, second.envelope.centroid
+    back = ~(Affine.translation(c1.x + c2.x, c1.y + c2.y) * Affine.rotation(180))
+    here = first.centroid
+    keep = lambda p: abs(p.centroid.x - here.x) < 1 and abs(p.centroid.y - here.y) < 1
+    local = local_matrix(tri.record)
+    return keep, [local, back * local]
+
+
+@recipe
+def BirdHouse(box, parts):
+    """Box x × y (front at Y = 0) on its floor: the gables (h + t high at the eaves, the roof
+    slopes at 45° up to a ridge x / 2 higher) at the front and back, the long walls (h high, F
+    ends over the gables' fingers) left and right, the floor in the h edges' holes (Z -t … 0; the
+    walls go edge_width below it). The two roof panels lie on the gables' slopes, left and right,
+    their finger holes on the gables' fingers, from the ridge down. Their outline isn't jointed to
+    anything but their ridge: the f one (the first, left) reaches the ridge on its inner face, the F
+    one's holes start t below its ridge edge, so it covers the first's thickness there."""
+    t, x, y, h = box.thickness, box.x, box.y, box.h
+    ov = 2 ** 0.5 * x / 2 * box.roof_overhang
+    s = 2 ** -0.5
+    peak = (x / 2, -t - ov, h + t + x / 2)       # the ridge on the inner faces, at the panels' u = 0
+    out = [Placement((0, 0, 0), X, Z, 1), Placement((0, y, 0), X, Z, -1),
+           Placement((0, 0, 0), Y, Z, -1), Placement((x, 0, 0), Y, Z, 1),
+           Placement((0, 0, 0), X, Y, -1)]
+    for roof, V, side, down in ((parts[5], (s, 0, s), -1, t), (parts[6], (-s, 0, s), 1, 2 * t)):
+        top = _part_polys(roof)[0].bounds[3] - 0.1        # the ridge edge's fingers' ends
+        out.append(Placement(_add(peak, V, -(top - down)), Y, V, side))
+    return out
+
+
+@recipe
+def OttoBody(box, parts):
+    """IntegratedHingeBox's chest hinge box (see there), with the generator's sizes: the sides d
+    deep (drawn x long), the front and back w wide (drawn y long), the body h, the head hl high,
+    the eyes in the head's front at Y = 0. The head is shown closed, and not as a lid: it is the
+    robot's head. The bottom (drawn after the top, with the servo shaft holes x - 12 apart at its
+    u = 6 and x - 6) is turned so the legs' servos are left and right. The servo mounts lie level
+    against the left and right sides, their servo holes over the shaft holes, 7 mm up (the servo's
+    tabs under them, see 3D-REVIEW). The PCB clamps, the clip and the button plate are left out."""
+    t = box.thickness
+    r = box.edges["O"].startWidth()
+    hy2 = box.edges["P"].startWidth()
+    d, w = parts[0].record.args[0], parts[4].record.args[0]
+    h, hl = parts[4].record.args[1], parts[6].record.args[1]
+    top = h + hl
+    left, right = Placement((0, d, 0), (0, -1, 0), Z, 1), Placement((w, 0, 0), Y, Z, 1)
+    places = [
+        left,                                                 # O
+        Placement((0, d, h + hy2), (0, -1, 0), Z, 1),         # head left, p
+        right,                                                # o
+        Placement((w, 0, h + hy2), Y, Z, 1),                  # head right, P
+        Placement((0, 0, 0), X, Z, 1),                        # lower front
+        Placement((w, d, 0), (-1, 0, 0), Z, 1),               # lower back
+        Placement((0, 0, top), X, (0, 0, -1), -1),            # upper front, the eyes
+        Placement((0, d, top), X, (0, 0, -1), 1),             # upper back, q
+        Placement((0, 0, top), Y, X, -1),                     # top
+        Placement((0, 0, 0), X, Y, -1),                       # bottom
+    ]
+    out = list(zip(parts, places))
+    out += [(_hinge_disc(parts[0], (-t, h), r), left), (_hinge_disc(parts[2], (d + t, h), r), right)]
+    servo = OTTOBODY_SERVO_Z
+    out += [(parts[14], Placement((14, 0, servo), Y, (-1, 0, 0), 1)),
+            # its hole for the switch hangs off its end: the disc cut off it is scrap
+            (parts[15], Placement((w, 0, servo), Y, (-1, 0, 0), 1, keep=lambda p: p.area > 100))]
+    return out
+
+
+OTTOBODY_SERVO_Z = 7.0  # the servo mounts' lower face: on the servo's tabs, the servo upside down on the bottom
+
+
+@recipe
+def PhotoFrame(box, parts):
+    """The frame upright, as it hangs (its mounting holes at the top of the base), the layers from
+    the back: the base (Y 2t … 3t, its photo outline etched on the front), the middle layer (t … 2t:
+    the bottom guide guide_h high, a side guide each side from the top down to it, dovetailed into
+    it) with the matting in its pocket, standing on the bottom guide, centred, and the front
+    (0 … t), one plate with the window or four mitred bits (top, bottom, left, right) dovetailed at
+    the corners. The photo the generator draws as a template (not cut) is shown as paper behind
+    the matting (_photoframe_photo); no glass."""
+    t, d = box.thickness, box.d
+    bx, by, gw, gh = d.base_x, d.base_y, d.guide_w, d.guide_h
+    back = (0, 0, -1)
+    by_caller = {
+        "render_base": [Placement((0, 2 * t, 0), X, Z, -1)],
+        "middle_unsplit": [Placement((0, t, 0), X, Z, -1)],
+        "middle_split": [Placement((0, t, 0), X, Z, -1),                          # bottom guide
+                         Placement((0, t, by), back, X, -1),                      # left side, its d down
+                         Placement((bx, t, by), back, (-1, 0, 0), 1)],            # right side
+        "front_unsplit": [Placement((0, 0, 0), X, Z, -1)],
+        "front_split": [Placement((0, 0, by), X, back, 1),                        # top, its wide edge up
+                        Placement((0, 0, 0), X, Z, -1),                           # bottom
+                        Placement((0, 0, 0), Z, X, 1),                            # left
+                        Placement((bx, 0, 0), Z, (-1, 0, 0), -1)],                # right
+        "render_matting": [Placement(((bx - d.mat_x) / 2, t, gh), X, Z, -1)],
+    }
+    out = []
+    for p in parts:
+        places = by_caller.get(p.record.caller)
+        if places:
+            out.append((p, places.pop(0)))
+    return out
+
+
+@decoration("PhotoFrame", "paper")
+def _photoframe_photo(box):
+    """The photo, centred, just behind the matting's window (its back face, in the pocket)."""
+    d, t = box.d, box.thickness
+    return Placement((0, 2 * t, 0), X, Z, 1).pieces(
+        [rect(d.centre_x - d.photo_x / 2, d.centre_y - d.photo_y / 2,
+              d.centre_x + d.photo_x / 2, d.centre_y + d.photo_y / 2)], 0.3)
+
+
+def _canstorage_frame(box):
+    """(z of the sides' base line, chute angle in radians, cos, sin): their bottom edge (the stackable
+    feet, an outset edge) stands on the floor, the base line its start width above it."""
+    a = math.radians(box.chuteAngle)
+    return box.edges[box.bottom_edge].startWidth(), a, math.cos(a), math.sin(a)
+
+
+def _canstorage_side(part):
+    """The side's outline when its top edge is plain: the front edge then starts with a jump, so the
+    outline is two open cuts, the top edge running on past the front's start: the top edge cut
+    short there, then the front."""
+    cuts = []
+    loops_of(part, local_matrix(part.record), cuts)
+    rest, front = sorted(cuts, key=lambda c: c[0][0])   # the front starts on the top edge, the rest at u = 0
+    while rest[-1][0] < front[0][0]:
+        rest = rest[:-1]
+    return Polygon(rest + front)
+
+
+@recipe
+def CanStorage(box, parts):
+    """Sides in the YZ plane (u = Y from the front, where the cans come out, to the back; the right
+    one at X = width, the left at X = 0, thickness outwards), everything else between them, where
+    the sides' finger holes are: the bottom chute rising to the back from the front's foot, the top
+    chute falling to the back (its notch at the back lets the cans drop onto the bottom chute), the
+    barrier standing at the front of the bottom chute, the back (u from the top down) and the top.
+    The three pushers stand in the corner of bottom chute and back, their tabs in the slots; the
+    stabilizers inside the feet, the short ones at the front."""
+    t, D, W, depth, height = box.thickness, box.canDiameter, box.width, box.depth, box.height
+    z0, a, c, s = _canstorage_frame(box)
+    up_back, up_front = (0, c, s), (0, c, -s)                # the chutes' slopes
+    out, pushers = [], iter((0.15, 0.5, 0.85))                # where the pushers' slots are across
+    for part in parts:
+        r = part.record
+        if r.label in ("right", "left"):
+            plate = _canstorage_side(part) if box.top_edge == "e" else None
+            p = Placement((W, 0, z0), Y, Z, 1, plate=plate) if r.label == "right" else \
+                Placement((0, 0, z0), Y, Z, -1, plate=plate)
+        elif r.label == "bottom chute":   # the finger holes' middle starts t/2 above the base line
+            p = Placement(_add((0, 0, z0 + t / 2), (0, -s, c), -t / 2), up_back, X, -1)
+        elif r.label == "top chute":
+            v = t + D + box.bottom_chute_height + box.top_chute_height + t / 2
+            p = Placement(_add((0, 0, z0 + v), (0, s, c), -t / 2), up_front, X, -1)
+        elif r.label == "barrier":
+            p = Placement((0, t, z0 + 1.1 * t + box.burn + s * 2 * t), Z, X, 1)
+        elif r.label == "back":
+            p = Placement((0, depth, z0 + height), (0, 0, -1), X, -1)
+        elif r.label == "top":
+            p = Placement((0, 0, z0 + height), Y, X, -1)
+        elif r.label and r.label.startswith("Stabilizer"):
+            n = int(r.label[-1])
+            y0 = 0 if n <= 2 else depth + 2 * t - r.args[0]
+            p = Placement((0 if n % 2 else W - t, y0, 0), Y, Z, 1)
+        elif r.primitive is None and r.caller == "render":    # a pusher: its A side on the chute,
+            across = next(pushers)                               # local (0, 0) under its tab
+            corner = (0, depth, z0 + t / 2 + depth * math.tan(a) + t / 2 / c)   # chute's top, back's face
+            o = _add(_add(corner, up_back, -box.pusherA), (0, -s, c), -t)
+            p = Placement(_add(o, X, W * across - t / 2), up_back, (0, -s, c), 1)
+        else:
+            continue
+        out.append((part, p))
+    return out
+
+
+@decoration("CanStorage", "tin")
+def _canstorage_cans(box):
+    """The cans lying across, where the generator's debug drawing has them: half on the bottom chute
+    from the barrier on, the rest on the top chute, as many as fit before its drop notch."""
+    t, D = box.thickness, box.canDiameter
+    z0, a = _canstorage_frame(box)[:2]
+    n = math.ceil(box.canNum / 2)
+    out = []
+    top = t + D + box.bottom_chute_height + box.top_chute_height + t / 2
+    fit = int((box.top_chute_depth - 1.5 * D) / D + 0.5)   # centres before the notch
+    rows = [((0, t), a, [(2 * t + (0.5 + i) * D, D / 2) for i in range(n)]),
+            ((0, top), -a, [((0.5 + i) * D, D / 2 + t / 2) for i in range(min(box.canNum - n, fit))])]
+    for (u0, v0), ang, cans in rows:
+        for u, v in cans:   # in the side's u, v turned by the chute's angle
+            y = u0 + u * math.cos(ang) - v * math.sin(ang)
+            z = z0 + v0 + u * math.sin(ang) + v * math.cos(ang)
+            out += _rod("tin", (0, 0, 0), X, Y, (y, z), D / 2 - 0.5, 0.01 * box.canHeight, 1.01 * box.canHeight, 24)
+    return out
+
+
+def _dispenser_levels(box):
+    """(z of the walls' base line, z of the floor's top, wall height): the walls stand on their
+    bottom edge (finger holes, or stackable feet with the floor hb up)."""
+    t, hb = box.thickness, box.bottomheight
+    hb = max(0, hb - box.edges["š"].spacing())
+    z0 = box.edges["š" if hb else "h"].startWidth()
+    return z0, z0 + (hb + t if hb else 0), box.h + (hb + t if hb else 0)
+
+
+@recipe
+def Dispenser(box, parts):
+    """The walls round the inner x × y (the sides' u from the back to the front, where their
+    outset bottom leaves the slot; thickness outwards), the floor in the walls' finger holes (its
+    finger notch at the front), the front panels above the slot from each side, Y -t..0, and the
+    lid's two layers on the walls' top: the plain one inside the opening, the outset one on it."""
+    x, y = box.x, box.y
+    z0, floor, th = _dispenser_levels(box)
+    front = z0 + th - (box.h - box.slotheight)
+    back = (0, -1, 0)
+    return {
+        "Floor": Placement((0, 0, floor), X, Y, -1),
+        "Lid bottom": Placement((0, 0, z0 + th), X, Y, -1, lid=True),
+        "Lid top": Placement((0, 0, z0 + th), X, Y, 1, lid=True),
+        "Left wall": Placement((0, y, z0), back, Z, 1),
+        "Right wall": Placement((x, y, z0), back, Z, -1),
+        "Back wall": Placement((0, y, z0), X, Z, -1),
+        "front": Placement((0, 0, front), X, Z, 1),
+        "Left front": Placement((0, 0, front), X, Z, 1),
+        "Right front": Placement((x, 0, front), (-1, 0, 0), Z, -1),
+    }
+
+
+@decoration("Dispenser", "cards")
+def _dispenser_stack(box):
+    """A stack of the items it dispenses (slot height thick, 1 mm clear of the walls) on the
+    floor, two thirds up."""
+    x, y, hs = box.x, box.y, box.slotheight
+    floor = _dispenser_levels(box)[1]
+    out = []
+    for i in range(max(1, int(box.h * 2 / 3 / hs))):
+        out += Placement((1, 1, floor + i * hs), X, Y, 1).pieces([rect(0, 0, x - 2, y - 2)], hs - 0.4)
+    return out
+
+
+def _coindisplay_slope(box):
+    """(origin, U, V) of the coin plates' top face: across the holder from its left side's inner
+    face, up the slope from the holder's front (the sides' high end at the back)."""
+    x, y, h = inner(box)
+    a = box.angle  # render() turned it into radians
+    return (x / 2 - box.coin_plate / 2, y / 2 - box.coin_plate_x / 2, box.coin_showcase_h), X, (0, math.cos(a), math.sin(a))
+
+
+@recipe
+def CoinDisplay(box, parts):
+    """ClosedBox's cube round x × y × h, its walls and top in clear acrylic so the holder shows.
+    The holder stands centred on the bottom, in its finger holes: the two sides P apart, front to
+    back (u from the back, their slope rising to it), the front piece across their front ends, and
+    the two coin plates in the sides' slope, whose finger joint is 2t deep for them: the one with
+    the coin's hole on top, flush with the slope, the plain one under it."""
+    x, y, h = inner(box)
+    t, P, Px = box.thickness, box.coin_plate, box.coin_plate_x
+    o, U, V = _coindisplay_slope(box)
+    N = _cross(U, V)
+    back = (x / 2 - P / 2, y / 2 + Px / 2, 0)
+    glass = dict(clear=True)
+    return {
+        "Wall 1": Placement((0, 0, 0), X, Z, 1, **glass),
+        "Wall 2": Placement((0, 0, 0), Y, Z, -1, **glass),
+        "Wall 4": Placement((x, 0, 0), Y, Z, 1, **glass),
+        "Wall 3": Placement((0, y, 0), X, Z, -1, **glass),
+        "Top": Placement((0, 0, h), X, Y, 1, **glass),
+        "Bottom": Placement((0, 0, 0), X, Y, -1),
+        "CoinSide1": Placement(back, (0, -1, 0), Z, 1),
+        "CoinSide2": Placement(_add(back, X, P), (0, -1, 0), Z, -1),
+        "CoinSide3": Placement((o[0], o[1], 0), X, Z, 1),
+        "Coin Plate": Placement(_add(o, N, -t), U, V, 1),
+        "Coin Plate Base": Placement(_add(o, N, -2 * t), U, V, 1),
+    }
+
+
+@decoration("CoinDisplay", "brass")
+def _coindisplay_coin(box):
+    """The coin, 2 mm thick, lying in the top plate's hole on the plain one."""
+    o, U, V = _coindisplay_slope(box)
+    P = box.coin_plate
+    return _solid("brass", Placement(_add(o, _cross(U, V), -box.thickness), U, V, 1),
+                  Point(P / 2, P / 2).buffer(box.coin_d / 2 - 0.3, quad_segs=16), 2)
+
+
+
+def _display_lean(box):
+    """(the slot's lower edge above the panel's bottom, the panel's up and forward directions, the
+    world point of its front face's bottom centre): the shelf a third out in front of the panel,
+    square to it, its back end on the floor, sets the lean; the panel's back bottom edge on the
+    floor too."""
+    t, x = box.thickness, box.x
+    low = 0.2 * box.h - 0.65 * t
+    th = math.atan2(low, x * 2 / 3 - t)
+    up, fwd = (0, math.sin(th), math.cos(th)), (0, -math.cos(th), math.sin(th))
+    return low, up, fwd, (0, -t * math.cos(th), t * math.sin(th))
+
+
+@recipe
+def Display(box, parts):
+    """The panel leaning back, X centred on 0; the rounded plate through its slot, square to it
+    and lying on the slot's lower edge: a third of it in front, the shelf, the rest behind, a
+    leg down to the floor."""
+    plate, panel = parts[0], parts[1]
+    x = box.x
+    low, up, fwd, foot = _display_lean(box)
+    back = tuple(-c for c in fwd)
+    pb = max(_part_polys(plate), key=lambda q: q.area).bounds
+    slot = Polygon(max(_part_polys(panel), key=lambda q: q.area).interiors[0]).bounds
+    cu, cv = (slot[0] + slot[2]) / 2, slot[1] - low          # the panel's bottom centre, drawn where it was
+    tip = _add(_add(foot, up, low), fwd, x / 3)              # the shelf's front edge, on its lower face
+    return [(plate, Placement(_add(_add(tip, X, -(pb[0] + pb[2]) / 2), back, -pb[1]), X, back, 1)),
+            (panel, Placement(_add(_add(foot, X, -cu), up, -cv), X, up, -1))]
+
+
+@decoration("Display", "paper")
+def _display_flyers(box):
+    """A stack of flyers (x − 4 wide, h tall, 3 mm) standing on the shelf against the panel."""
+    low, up, fwd, foot = _display_lean(box)
+    w = box.x - 4
+    return Placement(_add(foot, up, low + box.thickness), X, up, 1).pieces([rect(-w / 2, 0, w / 2, box.h)], 3)
+
+
+def _carbonfilter_pieces(part, upright=lambda q: True):
+    """The pieces of a part drawn as rows of them, left to right: [(piece, frame)], those drawn
+    upside down after the others (upright(piece) says which: the outer ribs' second row); the frame
+    putting the piece's bounding box's lower left corner at local (0, 0), turned upright first (the
+    piece is given in it). Outlines left open by a hair (the outer ribs') are closed."""
+    local, cuts = local_matrix(part.record), []
+    polys = polygons_of(loops_of(part, local, cuts)) or [
+        max(getattr(g, "geoms", [g]), key=lambda g: g.area) for g in (Polygon(c).buffer(0) for c in cuts if len(c) > 2)]
+    out = []
+    for q in sorted(polys, key=lambda q: (not upright(q), q.bounds[0])):
+        x0, y0, x1, y1 = q.bounds
+        turn = Affine.identity() if upright(q) else Affine.rotation(180, ((x0 + x1) / 2, (y0 + y1) / 2))
+        frame = Affine.translation(-x0, -y0) * turn
+        out.append((affine_transform(q, frame.to_shapely()), frame * local))
+    return out
+
+
+def _carbonfilter_foot_down(q):
+    """An outer rib stands on its wide rounded foot, its tip up."""
+    x0, y0, x1, y1 = q.bounds
+    return q.intersection(rect(x0, y0, x1, y0 + 10)).area > q.intersection(rect(x0, y1 - 10, x1, y1)).area
+
+
+@recipe
+def CarbonFilter(box, parts):
+    """The end plates (x × h) at Y = -t..0 and y..y + t, everything else between them along Y,
+    where their finger holes are. Each of the V pockets (w wide, from X = t) has its bottom plate
+    lying at Z 3t..4t and, on each slope, an outer and an inner top rail tilted by a, 50 deep from
+    the top, the charcoal layer between them. Ribs stand across Y in the bottom plate's holes:
+    those of the left slopes at the holes drawn from the plate's first edge, those of the right
+    slopes at the mirrored ones (3t beside them, so they pass each other); the rails are turned
+    to match. Inner ribs (straight tops) lean in from the middle of the plate to the inner rail;
+    outer ribs stand on the floor under the plate's edge, along the outer rail, their tops out to
+    the side bar (the pointier ones, on the outer slopes) or the next pocket. The side holders lie
+    on the end plates outside the charcoal, under the rails; the top stabilizers lie across
+    three pairs of inner ribs, hooked on them."""
+    t, x, y, h, w, R = box.thickness, box.x, box.y, box.h, box.w, box.ribs
+    P = box.pockets
+    a = math.radians(box.a)
+    s, c = math.sin(a), math.cos(a)
+    ys = [(i + 1) * y / (R + 1) - 1.5 * t for i in range(R)]     # the ribs' mid-planes (left slopes)
+    left, right = (-1, 0, 0), X
+    out = []
+    by = {}
+    for part in parts:
+        by.setdefault(part.record.caller if part.record.primitive is None else part.record.label, []).append(part)
+    ends, bars = by[None][:2], by["Sides"]
+    out += [(ends[0], Placement((0, 0, 0), X, Z, 1)), (ends[1], Placement((0, y, 0), X, Z, -1)),
+            (bars[0], Placement((0, 0, h - 50), Y, Z, 1)), (bars[1], Placement((x, 0, h - 50), Y, Z, -1))]
+    rails = iter(by["Top rails"])
+    inner = iter(_carbonfilter_pieces(by["innerRibs"][0]))
+    outer = _carbonfilter_pieces(by["outerRibs"][0], _carbonfilter_foot_down)
+    edge, others = iter(outer[:2 * R]), iter(outer[2 * R:])   # the pointier ones are drawn first
+    holders = iter(_carbonfilter_pieces(by["sideHolders"][0]))
+    stabs = iter(_carbonfilter_pieces(by["topStabilizers"][0]))
+    at_origin = lambda q: abs(q.bounds[0]) < 1 and abs(q.bounds[1]) < 1
+
+    def piece(part, it, place, closed=False):
+        q, frame = next(it)
+        # an outline the generator left open is given whole, as the sheet of a part of no holes
+        keep = dict(keep=lambda p: False, plate=q) if closed else dict(keep=at_origin)
+        out.append((part, Placement(*place, **keep), frame))
+
+    for k in range(P):
+        posx = t + k * w
+        plate = posx + w / 2 - 50 + t                              # the bottom plate's left edge
+        out.append((by["bottom plate"][k], Placement((plate, 0, 3 * t), Y, X, -1)))
+        for d, sgn in ((left, 1), (right, -1)):
+            # rails: centred on the holes from (u0, h) down the slope, v = 0 at their lower end
+            slope_up = (-s * sgn, 0, c)
+            for u0 in ((posx + t / 2, posx + 40 + t / 2) if sgn > 0 else (posx + w - t / 2, posx + w - 40 - t / 2)):
+                bottom = (u0 + 50 * s * sgn, 0, h - 50 * c)
+                if sgn > 0:
+                    out.append((next(rails), Placement(_add(bottom, (c, 0, s), -t / 2), Y, slope_up, 1)))
+                else:
+                    out.append((next(rails), Placement(_add((bottom[0], y, bottom[2]), (-c, 0, s), -t / 2),
+                                                       (0, -1, 0), slope_up, 1)))
+            mids = ys if sgn > 0 else [y - m for m in ys]
+            # where the slope's outer and inner rib start at the plate (their far end from the layer)
+            x_out, x_in = (plate + 12, plate + 57) if sgn > 0 else (plate + 82, plate + 37)
+            outer_it = edge if (k == 0 and sgn > 0) or (k == P - 1 and sgn < 0) else others
+            ribs = by["outerRibs"][0], by["innerRibs"][0]
+            for m in mids:
+                piece(ribs[0], outer_it, ((x_out, m - t / 2, 0), d, Z, sgn), closed=True)
+                piece(ribs[1], inner, ((x_in, m - t / 2, 3 * t), d, Z, sgn))
+            # side holders, 10 wide outside the charcoal, on both end plates
+            for x0 in ((plate, plate + 47) if sgn > 0 else (plate + 94, plate + 47)):
+                for y0, side in ((0, sgn), (y, -sgn)):
+                    piece(by["sideHolders"][0], holders, ((x0, y0, 4 * t), d, Z, side))
+    # stabilizers: across the gap between a pocket's two inner ribs (l apart where they hook)
+    n = min(3, R)
+    l = 2 * (h - 60) * s - 20
+    z = 4 * t + (l + 20) / (2 * math.tan(a))
+    for k in range(P):
+        mid = t + k * w + w / 2
+        for m in range(n):
+            i = int((m + 0.5) * R / n)
+            piece(by["topStabilizers"][0], stabs, ((mid - (l + 4 * t) / 2, ys[i] - 1.5 * t, z), Y, X, -1))
+    return out
+
+
+# ---------------------------------------------------------------- OttoLegs, Hook, PoleHook, RoyalGame, AgricolaInsert
+
+OTTOLEGS_FOOT_GAP = 10  # between the two feet, side by side along Y
+
+
+@recipe
+def OttoLegs(box, parts):
+    """Each leg on its foot, the two side by side along Y. The foot lying; in its two rows of finger
+    holes (across X) an ankle bracket each, u along Y from the foot's edge: the bolt one (anklebolt1)
+    behind (low X), the servo-arm one in front. Both bracket pieces of a part are drawn in one, the
+    second turned half round: each is brought onto the first. Between the brackets the leg box hangs
+    on the ankle axis, level with their holes (15 up, 20 along): the axis goes through the back wall's
+    hole and the middle of the front's notch, 7 above the leg's floor. The leg: ly along X (back at
+    X = 0, front at ly from 7 up), lx along Y between the sides (the one with the cable hole towards
+    the other leg), lh up; the top on the walls, the plain plate under it (its pilot hole under the
+    top's), the bottom ly − 7 long from the back (the front's low 7 left open), the shelf in the sides'
+    holes and the ledge in the front's, both at 25. A servo ring round each arm bracket's hole,
+    outside."""
+    t = box.thickness
+    lx, ly, lh = 12.4, 23.5, max(box.length, 25 + 6 + t)  # as render() has them
+    fx, fy = 60, 40                                        # the foot
+    w = ly + 5.5 + 2 * t                                   # the brackets' finger-hole rows apart
+    big = lambda q: q.area > 100  # the front's notch and its hole leave a scrap
+
+    def halves(part):
+        a, b = sorted(_part_polys(part), key=lambda q: q.bounds[1])
+        ca, cb = a.envelope.centroid, b.envelope.centroid
+        split = (a.bounds[3] + b.bounds[1]) / 2
+        local = local_matrix(part.record)
+        keep = lambda q: q.bounds[1] < split
+        return [(local, keep), (Affine.translation(ca.x + cb.x, ca.y + cb.y) * Affine.rotation(180) * local, keep)]
+
+    arm, bolt = halves(parts[20]), halves(parts[21])
+    out = []
+    for i in range(2):
+        y0 = i * (fy + OTTOLEGS_FOOT_GAP)
+        ox, oy, oz = fx / 2 - ly / 2, y0 + 20 - lx / 2, t + 15 - 7
+        at = lambda x, y, z: (ox + x, oy + y, oz + z)
+        front, back, side, holed = parts[4 * i:4 * i + 4]
+        if i:
+            side, holed = holed, side
+        out += [(front, Placement(at(ly, 0, 7), Y, Z, 1, keep=big)), (back, Placement(at(0, 0, 0), Y, Z, -1)),
+                (side, Placement(at(0, 0, 0), X, Z, 1)), (holed, Placement(at(0, lx, 0), X, Z, -1)),
+                (parts[8 + i], Placement(at(0, 0, lh), X, Y, 1)),
+                (parts[10 + i], Placement(at(0, 0, lh - t), Y, X, -1)),
+                (parts[12 + i], Placement(at(ly - 4.6, 0, 25 - t / 2), X, Y, 1)),
+                (parts[14 + i], Placement(at(ly - 7, 0, 0), Y, (-1, 0, 0), -1)),
+                (parts[16 + i], Placement(at(3, 0, 25 - t / 2), Y, X, -1)),
+                (parts[18 + i], Placement((0, y0, 0), X, Y, 1)),
+                (parts[20], Placement((fx / 2 + w / 2 - t / 2, y0, t), Y, Z, 1, keep=arm[i][1]), arm[i][0]),
+                (parts[21], Placement((fx / 2 - w / 2 - t / 2, y0, t), Y, Z, 1, keep=bolt[i][1]), bolt[i][0]),
+                (parts[22 + i], Placement((fx / 2 + w / 2 + t / 2, y0 + 10, t + 5), Y, Z, 1))]
+    return out
+
+
+@recipe
+def Hook(box, parts):
+    """Hung on the wall, the back plate's back at Y = t: the plate standing (X along its width), the
+    two side profiles in its finger holes (their back edge, drawn f.margin() in from their start, on
+    its front face), the hook reaching forward (−Y). The mouth's floor lies on the sides' support
+    edge (h_a + strength up), the post's inner wall stands on it d forward, the post's top closes it
+    at the hook's height."""
+    t, d, h = box.thickness, box.depth, box.height
+    w = box.width - 2 * t
+    z0 = box.h_a + box.strength  # the mouth's floor
+    m = box.edges["f"].margin()
+    fwd = (0, -1, 0)
+    return [Placement((0, 0, 0), X, Z, -1),
+            Placement((t, m, 0), fwd, Z, -1), Placement((w + 2 * t, m, 0), fwd, Z, -1),
+            Placement((2 * t, 0, z0), fwd, X, 1),
+            Placement((2 * t, -d, z0 + t), Z, X, -1),
+            Placement((2 * t, -d - t, z0 + h), fwd, X, 1)]
+
+
+
+
+def _polehook_frame(box):
+    """(Z of the forks' base line, the pin's (X, Z), the pole's centre (X, Z)): the forks stand
+    across X centred on the disc stack, on seven layers (the knob's three, the four discs)."""
+    t, d, w = box.thickness, box.diameter, box.ww
+    zb = 7 * t
+    return zb, (d / 2 + w / 2, zb + 2 * d), (0.0, zb + d)
+
+
+@recipe
+def PoleHook(box, parts):
+    """Standing on its knob: the two knob layers with the screw head's hex hole at the bottom, the
+    one with the screw hole on them, then the four big discs (the clamp disc, with its strap slot,
+    third from the top), the one with the forks' finger holes on top. The five forks stand on it
+    across X, side by side (Y −2.5t..2.5t): the two full ones outside (their tall arm's pin hole on
+    top), the finger-jointed short one in the middle, the plain short ones between; their U round the
+    pole, which lies across Y. The three lock layers turn on the pin through the tall arms, in the
+    gap between them: one arm on the line to the pole's centre (its end on the pole), the other up
+    over the opening. The two small discs cap the pin outside the full forks."""
+    t, d, w = box.thickness, box.diameter, box.ww
+    tw = d + 2 * w
+    zb, (px, pz), (cx, cz) = _polehook_frame(box)
+    mf = box.edges["f"].margin()
+    out = []
+    for i, n in enumerate((9, 10, 11, 8, 7, 6, 5)):
+        out.append((parts[n], Placement((0, 0, i * t), X, Y, 1)))
+    for n, c in zip((0, 3, 2, 4, 1), (-2, -1, 0, 1, 2)):
+        m = mf if n < 3 else 0.0  # the plain forks' bottom edge has no fingers
+        out.append((parts[n], Placement((-tw / 2, c * t + t / 2, zb - m), X, Z, 1)))
+    ux, uz = cx - px, cz - pz
+    k = math.hypot(ux, uz)
+    U, V = (ux / k, 0, uz / k), (uz / k, 0, -ux / k)
+    for i in range(3):
+        o = _add(_add((px, -1.5 * t + i * t, pz), U, -w / 2), V, -w / 2)
+        out.append((parts[12 + i], Placement(o, U, V, 1)))
+    out += [(parts[15], Placement((px, -2.5 * t, pz), X, Z, 1)), (parts[16], Placement((px, 2.5 * t, pz), X, Z, -1))]
+    return out
+
+
+@decoration("PoleHook", "grip-red")
+def _polehook_pole(box):
+    """The pole in the forks' U, 3 diameters long."""
+    _, _, (cx, cz) = _polehook_frame(box)
+    d = box.diameter
+    return _rod("grip-red", (cx, 0, cz), Y, X, (0, 0), d / 2, -1.5 * d, 1.5 * d, segs=24)
+
+
+@decoration("PoleHook", "steel")
+def _polehook_pin(box):
+    """The pin through the tall arms and the lock, into the caps."""
+    t = box.thickness
+    _, (px, pz), _ = _polehook_frame(box)
+    return _rod("steel", (px, 0, pz), Y, X, (0, 0), box.pin / 2 - 0.1, -3.5 * t, 3.5 * t)
+
+
+def _royalgame_engraved(part, place, keep_hole=lambda q: False):
+    """(part, place, frame) for a part whose blue lines are engravings, not cuts (the board's
+    squares, a piece's rings): its largest piece, filled, keeping only the holes keep_hole picks."""
+    main = max(_part_polys(part), key=lambda q: q.area)
+    loops = [main.exterior] + [i for i in main.interiors if keep_hole(Polygon(i))]
+    ring = lambda r: SimpleNamespace(path=[("M", *r[0])] + [("L", *q) for q in r[1:]], params={})
+    return SimpleNamespace(record=part.record, pathes=[ring(list(r.coords)) for r in loops]), place, Affine.identity()
+
+
+@recipe
+def RoyalGame(box, parts):
+    """The box lying, x along X: the front and back walls, the end wall at X = 0, the bottom, the
+    board on top (its pattern is engraving: filled, only the lid's catch hole cut). The end at X = x
+    is the sliding lid (nlmE: a slide-on lid turned on its side): its E edge at the front, its l
+    fingers in the back wall's L holes, its n edge under the board's N edge. The pieces laid out in
+    front: each player's seven discs in a row (their rings and dots engraved), then the eight dice,
+    each two triangles slotted across each other (the upright one along X on its base, the other
+    upside down across it, the slots' ends meeting), lifted so the lower tip is on the floor."""
+    t, x = box.thickness, box.x
+    s = x / 8
+    h, y = s / 2 * 3 ** 0.5, 3 * s
+    out = [(parts[0], Placement((0, y, 0), X, Z, -1)), (parts[1], Placement((x, 0, h), Y, (0, 0, -1), -1, lid=True)),
+           (parts[2], Placement((0, 0, 0), Y, Z, -1)), (parts[3], Placement((0, 0, 0), X, Z, 1)),
+           (parts[4], Placement((0, 0, 0), X, Y, -1)),
+           _royalgame_engraved(parts[5], Placement((0, 0, h), X, Y, 1), lambda q: q.area < 10)]
+    for i in range(7):
+        out.append(_royalgame_engraved(parts[6 + i], Placement((s / 2 + i * s, -s, 0), X, Y, 1)))
+        out.append(_royalgame_engraved(parts[13 + i], Placement((s / 2 + i * s, -2 * s, 0), X, Y, 1)))
+    depth = h / 2 - s / 20  # the slots' depth from the slotted edge
+    tris = []
+    for part in parts[20:22]:
+        local = local_matrix(part.record)
+        for q in sorted(_part_polys(part), key=lambda q: q.bounds[0]):
+            x0, y0, x1, y1 = q.bounds
+            if q.centroid.y - y0 < y1 - q.centroid.y:  # upright: the slotted edge at the bottom
+                frame = Affine.translation(-(x0 + x1) / 2, -y0) * local
+            else:
+                frame = Affine.rotation(180) * Affine.translation(-(x0 + x1) / 2, -y1) * local
+            tris.append((part, frame, y1 - y0))
+    keep = lambda q: abs(q.centroid.x) < 1 and 0 < q.centroid.y < s
+    for j in range(len(tris) // 2):
+        (pa, fa, _), (pb, fb, hb) = tris[2 * j:2 * j + 2]
+        cx, cy = s / 2 + j * 1.2 * s, -3.2 * s
+        z0 = max(0.0, hb - 2 * depth)
+        out += [(pa, Placement((cx, cy + t / 2, z0), X, Z, 1, keep=keep), fa),
+                (pb, Placement((cx + t / 2, cy, z0 + 2 * depth), Y, (0, 0, -1), 1, keep=keep), fb)]
+    return out
+
+
+# AgricolaInsert: the boxes as they sit in the game box (render()'s layout, its description and the
+# photo): X across the game box (the card tray, then a band of two rows with the room, moor and horse
+# boxes, then two columns of player boxes), Y along it (box_width = 218), the four upper trays on the
+# room and moor boxes, over the lower boxes.
+
+def _agricola_at(o, a):
+    """(point(u, v, z), b): a box's frame from o, a along its first axis, b = Z × a the second."""
+    b = _cross(Z, a)
+    return (lambda u, v, z=0.0: tuple(o[i] + u * a[i] + v * b[i] + z * Z[i] for i in range(3))), b
+
+
+def _agricola_tray(box, parts, o, a):
+    """A simple tray (bottom, two ends, two sides, then each movable divider and its feet) from o,
+    the inner bottom corner, its width along a, its length along Z × a. The sides are drawn from
+    their top (e) down. The dividers stand evenly spaced, upside down as drawn (the notched end on
+    the floor); each one's two feet (one drawn: the second shares its hypotenuse) lie on the floor,
+    their hypotenuse on the side wall, the slot at their apex round the divider."""
+    t = box.thickness
+    width, length = parts[0].record.args[:2]
+    height = parts[1].record.args[1]
+    P, b = _agricola_at(o, a)
+    down = (0, 0, -1)
+    na = tuple(-c for c in a)
+    out = [(parts[0], Placement(P(0, 0), a, b, -1)),
+           (parts[1], Placement(P(0, 0), a, Z, 1)), (parts[2], Placement(P(0, length), a, Z, -1)),
+           (parts[3], Placement(P(0, 0, height), down, b, -1)), (parts[4], Placement(P(width, 0, height), down, b, 1))]
+    pairs = parts[5:]
+    n = len(pairs) // 2
+    for k in range(n):
+        divider, feet = pairs[2 * k:2 * k + 2]
+        y = length * (k + 1) / (n + 1)
+        foot = Affine.rotation(-45) * local_matrix(feet.record)  # hypotenuse on u from 0 to 5t, apex at v = −2.5t
+        out += [(divider, Placement(P(0, y + t / 2, height), down, a, 1)),
+                (feet, Placement(P(0, y - 2.5 * t), b, na, 1), foot),
+                (feet, Placement(P(width, y - 2.5 * t), b, a, -1), foot)]
+    return out
+
+
+def _agricola_room_box(box, parts, o, a):
+    """A room box (tall side, bottom, low side, three trapezoids) from o, the inner bottom corner at
+    the tall side: its length along a, the trapezoids' bottom (the tiles' width) along Z × a, the
+    slanted opening up. The tall side is drawn upside down (its rim, e, first)."""
+    t = box.thickness
+    length, width = parts[1].record.args[:2]
+    height = parts[0].record.args[1]
+    P, b = _agricola_at(o, a)
+    return [(parts[0], Placement(P(0, 0, height), a, (0, 0, -1), -1)), (parts[1], Placement(P(0, 0), a, b, -1)),
+            (parts[2], Placement(P(0, width), a, Z, -1)),
+            (parts[3], Placement(P(0, 0), b, Z, -1)), (parts[4], Placement(P(length / 2 - t / 2, 0), b, Z, 1)),
+            (parts[5], Placement(P(length, 0), b, Z, 1))]
+
+
+def _agricola_moor_box(box, parts, o, a):
+    """The moor box (bottom, two long sides, the half-height divider, two ends) from o, the inner
+    bottom corner, its length along a: the side with the lowered corner at Z × a = 0, the end with it
+    at the far end, turned so the two lowered halves meet."""
+    t = box.thickness
+    length, width = parts[0].record.args[:2]
+    P, b = _agricola_at(o, a)
+    nb = tuple(-c for c in b)
+    return [(parts[0], Placement(P(0, 0), a, b, -1)),
+            (parts[1], Placement(P(0, 0), a, Z, 1)), (parts[2], Placement(P(0, width), a, Z, -1)),
+            (parts[3], Placement(P(0, width / 2 - t / 2), a, Z, -1)),
+            (parts[4], Placement(P(length, width), nb, Z, -1)), (parts[5], Placement(P(0, 0), b, Z, -1))]
+
+
+def _agricola_player_box(box, parts, o, a):
+    """A player box (two bed-shaped sides, bottom, head, the bed's two supports) from o, the inner
+    bottom corner at the head: its length along a (the foot end open), its width along Z × a. The
+    supports stand in the bottom's finger-hole rows, drawn from their top down."""
+    t = box.thickness
+    length, width = parts[2].record.args[:2]
+    P, b = _agricola_at(o, a)
+    hs = parts[4].record.args[0]  # the supports' height
+    start, near = 5 + 12, (width - 29.5) / 2  # as generate_bed_holes has them
+    return [(parts[0], Placement(P(0, 0), a, Z, 1)), (parts[1], Placement(P(0, width), a, Z, -1)),
+            (parts[2], Placement(P(0, 0), a, b, -1)), (parts[3], Placement(P(0, 0), b, Z, -1)),
+            (parts[4], Placement(P(start, near, hs), (0, 0, -1), a, -1)),
+            (parts[5], Placement(P(start, width - near - t, hs), (0, 0, -1), a, -1))]
+
+
+def _agricola_card_tray(box, parts, o, a):
+    """The card tray (no bottom) from o, the inner corner at the end wall: its length along a, its
+    width along Z × a. The two comb walls (their f end on the end wall, the divider slots along the
+    top), the end wall, the half-height spacer t clear of the first comb (drawn turned: its top first,
+    its slanted end on the sloped wall), and the sloped wall in the combs' slanted holes near the far
+    end, leaning back like the cards. The wood divider hangs in the ninth slot from the far end,
+    centred in it, drawn from its top edge down (the part in the slot) and from the first comb's
+    outer face. The paper divider (paper, standing free among the cards) is left out."""
+    from boxes.generators.dividertray import SlotDescription, SlotDescriptionsGenerator
+    t = box.thickness
+    comb, _, spacer, end, sloped, divider = parts[:6]
+    L, H = comb.record.args[:2]
+    width = end.record.args[0]
+    hs = sloped.record.args[1]
+    ang = math.acos(H / 62)  # the sleeved cards' 62 standing at the angle that fits H
+    sin, cos, tan = math.sin(ang), math.cos(ang), math.tan(ang)
+    P, b = _agricola_at(o, a)
+    ss = width - 99.8                     # the spacer's spacing
+    x0 = L - hs * tan - cos * t           # the sloped wall's foot
+    up = tuple(sin * a[i] + cos * Z[i] for i in range(3))
+    out = [(comb, Placement(P(0, 0), a, Z, 1)), (parts[1], Placement(P(0, width), a, Z, -1)),
+           (spacer, Placement(P(0, ss, H / 2), (0, 0, -1), a, 1)), (end, Placement(P(0, 0), b, Z, -1)),
+           (sloped, Placement(P(x0 + t * cos, width), tuple(-c for c in b), up, 1))]
+    slots = SlotDescriptionsGenerator().generate_all_same_angles([L / 19] * 19, t, 0.2, 30, H, math.degrees(ang))
+    slots.adjust_to_target_length(L)
+    down = tuple(-c for c in up)
+    across = tuple(-cos * a[i] + sin * Z[i] for i in range(3))  # out of the slot's back face, forward
+    u, k = L, 0
+    for s in slots.descriptions:
+        if isinstance(s, SlotDescription):
+            k += 1
+            if k == 9:
+                top = _add(P(u - s.round_edge_start_correction(), 0, H), down, s.width * tan)
+                o2 = _add(_add(top, across, (s.width - t) / 2), b, -t)
+                out.append((divider, Placement(o2, b, down, 1)))
+        u -= s.tracing_length()
+    return out
+
+
+@recipe
+def AgricolaInsert(box, parts):
+    """The insert as it sits in the game box (see above): the card tray along Y at X 0..w + 2t, its
+    end wall at Y = 0; next to it the band of two rows (2 × 37.2 + t inside): the wood and the stone
+    room boxes, the moor box and the horse box along Y in the order drawn (the horse box 0.5 short of
+    the far end); then the six player boxes in two columns of three, their heads towards Y = 0. On the
+    room and moor boxes (36.7 + t high) the upper trays: the four-compartment one, the two
+    145 long ones next to it and the food tray across the last two rows at the far end."""
+    t = box.thickness
+    row, inner_w = 37.2, 50.5
+    band = 2 * row + 3 * t                                   # the lower band's outer width
+    x_band = parts[3].record.args[0] + 2 * t                 # the card tray's outer width
+    x_player = x_band + band
+    low = 36.7 + t                                           # the room boxes' height: the upper level
+    out = _agricola_card_tray(box, parts[:7], (x_band - t, t, 0), Y)
+    y = 0.0
+    for i, n in ((41, 6), (47, 6)):
+        out += _agricola_room_box(box, parts[i:i + n], (x_band + t, y + t, t), X)
+        y += parts[i + 1].record.args[1] + 2 * t
+    out += _agricola_moor_box(box, parts[53:59], (x_band + band - t, y + t, t), Y)
+    out += _agricola_tray(box, parts[59:64], (x_band + t, 218 - t, t), (0, -1, 0))
+    for k in range(6):
+        col, r = divmod(k, 3)
+        o = (x_player + (col + 1) * (inner_w + 2 * t) - t, t + r * 218 / 3, t)
+        out += _agricola_player_box(box, parts[64 + 6 * k:70 + 6 * k], o, Y)
+    rw = 196 / 3
+    z = low + t
+    out += _agricola_tray(box, parts[7:18], (x_band + t, t, z), X)
+    out += _agricola_tray(box, parts[18:27], (x_band + rw + t, t, z), X)
+    out += _agricola_tray(box, parts[27:34], (x_band + 2 * rw + t, t, z), X)
+    out += _agricola_tray(box, parts[34:41], (x_band + rw + t, 218 - t, z), (0, -1, 0))
+    return out
+
+
+@recipe
+def NightLightBox(box, parts):
+    """The box on its stackable feet: the floor's top face at the s edges' finger holes (Z = f),
+    front at Y = 0 (its window), back at Y = y (seen from outside), the sides on the feet (u = Y
+    from the front: the plates' slots at the front of their top, the hinge at the back). On the
+    floor's finger holes two rails (1.5t in from the sides, the diffuser's notch at the back end);
+    the art plates and the diffuser stand on the floor in their notches, the plates' ears in the
+    sides' top slots. The electronics' top lies in the sides' F edges, its plain 1.5t at the back
+    (at the front it would sit on the diffuser); a guide through each side's square hole in
+    front of the diffuser's top; the lid on top (u = Y, its pins in the sides' hinge eyes).
+    Extra customizable face: the face in front of the front wall, a peg through the first two
+    of their square holes. The plates (WoodPlateThickness, DiffuserPlateThickness) are cut from the
+    box's thickness here, centred in their slots."""
+    t, M, n = box.thickness, box.Margin, box.WoodPlatesCount
+    minimal = box.BoxStyle == "minimalist"
+    s = box.edges["s"].settings
+    f = s.height + s.holedistance + t                      # the floor's top face
+    y = box.BackgroundDepth + box.DiffuserPlateThickness + (box.WoodPlateThickness + box.InterPlateSpacing) * n \
+        + box.InterPlateSpacing
+    x = box.PlateVisibleWidth + t * (4 if minimal else 8) + M
+    h = box.PlateVisibleHeight + t * (4 if minimal else 8) + M
+    rail_end = box.InterPlateSpacing + t - M / 2 + box.DiffuserPlateThickness \
+        + (box.InterPlateSpacing + box.WoodPlateThickness) * n          # the rails' back end (u = 0): start + length
+    plate_w = box.PlateVisibleWidth + t * (6 if minimal else 10)
+    first = y - box.BackgroundDepth - box.DiffuserPlateThickness - box.InterPlateSpacing \
+        - (box.WoodPlateThickness + M) / 2                              # the backmost plate's middle
+    by_caller = lambda c: [p for p in parts if p.record.caller == c]
+    walls = {p.record.label: p for p in parts if p.record.primitive}
+    back = (0, -1, 0)
+    out = [(p, Placement((xs, 0, 0), Y, Z, side)) for p, xs, side in zip(by_caller("side"), (0, x), (-1, 1))]
+    out += [(p, Placement((xr + t / 2, rail_end, f), back, Z, 1))
+            for p, xr in zip(by_caller("rail"), (1.5 * t, x - 1.5 * t))]
+    out += [(walls["bottom"], Placement((0, 0, f), X, Y, -1)),
+            (walls["back"], Placement((x, y, f), (-1, 0, 0), Z, 1)),
+            (walls["front"], Placement((0, 0, f), X, Z, 1)),
+            (walls["lid top"], Placement((0, 0, f + h), Y, X, -1, lid=True))]
+    # the electronics' top: its v = 0 (the plain 1.5t before its f edge) 1.5t behind the sides' F edge
+    out += [(p, Placement((0, y - 3.5 * t, f + h), X, back, 1)) for p in by_caller("elecCompartmentTop")]
+    guide_y = y - box.BackgroundDepth - box.DiffuserPlateThickness - t - 1.5 * M
+    guide_z = box.PlateVisibleHeight + t * (4 if minimal else 8)            # the side's square hole (Z = its v)
+    out += [(p, Placement((xg, guide_y, guide_z), X, Z, -1))
+            for p, xg in zip([q for q in parts if q.record.label == "guide"], (-t, x - t))]
+    dy = y - box.BackgroundDepth - box.DiffuserPlateThickness / 2 - M / 2
+    out += [(p, Placement((M, dy - t / 2, f), X, Z, -1)) for p in by_caller("diffuserPlate")]
+    out += [(p, Placement(((x - plate_w) / 2, first - i * (box.WoodPlateThickness + box.InterPlateSpacing) - t / 2, f),
+                          X, Z, -1)) for i, p in enumerate(by_caller("woodPlate"))]
+    if "customizable face" in walls:
+        out.append((walls["customizable face"], Placement((0, -t, f), X, Z, 1)))
+        pegs = [p for p in parts if p.record.primitive and p.record.label is None]
+        out += [(p, Placement((cx - t / 2, -2 * t, f + t), Y, X, -1))
+                for p, cx in zip(pegs, (1.5 * t, box.PlateVisibleWidth / 2 + 4 * t + M / 2))]
+    return out
+
+
+def _trianglelamp_copies(part):
+    """rectangularTriangle(…, num=n) draws its triangles in one part, every other one turned half
+    round: for each, (frame, keep) bringing it onto the first, as drawn (the right angle at local
+    (leg, 0)), and keeping it there."""
+    local = local_matrix(part.record)
+    polys = _part_polys(part)
+    first = min(polys, key=lambda q: abs(q.bounds[0]) + abs(q.bounds[1]))  # the one drawn from the origin
+    c1 = first.envelope.centroid
+    here = first.centroid
+    keep = lambda p: abs(p.centroid.x - here.x) < 1 and abs(p.centroid.y - here.y) < 1
+    out = []
+    for q in polys:
+        cq = q.envelope.centroid
+        moved = affine_transform(q, Affine.translation(c1.x - cq.x, c1.y - cq.y).to_shapely())
+        if first.symmetric_difference(moved).area < 0.05 * first.area:
+            frame = Affine.translation(c1.x - cq.x, c1.y - cq.y)
+        else:  # turned half round about the middle of the two envelopes
+            frame = Affine.translation(c1.x + cq.x, c1.y + cq.y) * Affine.rotation(180)
+        out.append((frame * local, keep))
+    return out
+
+
+@recipe
+def TriangleLamp(box, parts):
+    """Two lamps (every part is drawn twice), side by side 30 mm apart, each standing on its
+    hypotenuse wall, the screen at the front: the fff triangle at the back, the walls standing on
+    its edges (inner faces on them; the leg wall with the f end on the leg from the top corner
+    down, as seen from outside), the corner triangles in the walls' finger holes 1.5t below the
+    top (the ffe one in the right angle, the fef ones in the 45° corners) and the screen on them,
+    flush with the walls' front edge. In the lamp's own frame (a, b along the legs from the right
+    angle, w from the back to the front) every part is placed by where its local axes go."""
+    t, x, h, c = box.thickness, box.x, box.h, box.cornersize
+    s = math.sqrt(0.5)
+    da, db, dw = (-s, 0, -s), (s, 0, -s), (0, -1, 0)
+    neg = lambda d: tuple(-q for q in d)
+    hyp = _norm(_add(db, da, -1))
+    step = x / s + 30
+
+    def place(k, a, b, w, U, V, D, keep=None):
+        """Local (0, 0) at (a, b, w) of lamp k, the thickness towards D."""
+        origin = ((x + b - a) * s + k * step, h - w, t + (x - a - b) * s)
+        side = 1 if sum(n * d for n, d in zip(_cross(U, V), D)) > 0 else -1
+        return Placement(origin, U, V, side, keep=keep)
+
+    screen, base, ffe, fef = parts[0], parts[1], parts[8], parts[9]
+    out = []
+    for k in range(2):
+        out += [(parts[2 + k], place(k, 0, x, 0, neg(db), dw, neg(da))),        # on the b leg, its f end at the right angle
+                (parts[4 + k], place(k, 0, 0, 0, da, dw, neg(db))),             # on the a leg
+                (parts[6 + k], place(k, x, 0, 0, hyp, dw, _add(da, db)))]       # on the hypotenuse
+    for part, w, D in ((base, 0, neg(dw)), (screen, h - t, dw)):
+        out += [(part, place(k, x, 0, w, neg(da), db, D, keep), frame)
+                for k, (frame, keep) in enumerate(_trianglelamp_copies(part))]
+    out += [(ffe, place(k, c, 0, h - 2 * t, neg(da), db, dw, keep), frame)
+            for k, (frame, keep) in enumerate(_trianglelamp_copies(ffe))]
+    for i, (frame, keep) in enumerate(_trianglelamp_copies(fef)):
+        k, corner = divmod(i, 2)
+        out.append((fef, place(k, x, 0, h - 2 * t, neg(da), db, dw, keep) if corner == 0 else
+                    place(k, 0, x, h - 2 * t, neg(db), da, dw, keep), frame))
+    return out
+
+
+@recipe
+def BookHolder(box, parts):
+    """The sides standing at X = -t and X = width (u = Y from the low front, the tall back at the
+    back), the plates in their F edges, flush with the profile: the book back on the slope from
+    the corner C where it meets the book bottom (its bottom fingers down in the book bottom's F
+    end, behind C), the book bottom from its front end down to C, the back support standing in
+    the sides' finger holes 2t in from their back edge, bottom_support up. The front ledge stands
+    at the book bottom's front end, its F edge round the bottom's front fingers, rising
+    ledge_height above it."""
+    t, r, w = box.thickness, box.radius, box.width
+    a = math.radians(box.angle)
+    C = (r + r * math.cos(a) + box.book_depth * math.sin(a), box.bottom_support)    # as sideWall draws it
+    W = C[0] + box.book_height * math.cos(a) + r * math.sin(a) + r                   # the sides' depth
+    up = (0, math.cos(a), math.sin(a))                 # along the slope, upwards
+    back = (0, math.sin(a), -math.cos(a))              # along the book bottom, from its front to C
+    front = _add((0, *C), back, -box.book_depth)       # the book bottom's front end
+    walls = {p.record.label: p for p in parts}
+    sides = [p for p in parts if p.record.caller == "sideWall"]
+    out = list(zip(sides, [Placement((0, 0, 0), Y, Z, -1), Placement((w, 0, 0), Y, Z, 1)]))
+    out += [(walls["book back"], Placement((0, *C), X, up, -1)),
+            (walls["book bottom"], Placement(front, X, back, -1))]
+    if "back support" in walls:
+        out.append((walls["back support"], Placement((0, W - 1.5 * t, box.bottom_support), X, Z, 1)))
+    out += [(p, Placement(_add(front, up, box.ledge_height), X, tuple(-c for c in up), -1))
+            for p in parts if p.record.caller == "front_ledge"]
+    return out
+
+
+@recipe
+def Shadowbox(box, parts):
+    """Standing like a picture frame, x across, y up, on its bottom case wall: the mitered
+    faceplate at the front (Y 0..t, its outer edge t round the case walls, which stand in its F
+    edges from the back), the layer frames stacked behind it inside the case (each two
+    horizontal bars, their dovetail sockets inwards, and two vertical bars between them; no
+    paper between them), the LED strip holder's ring of walls inside the case at its back, and
+    the back panels the back edge asks for (drawLid's), as lids."""
+    t, x, y, L = box.thickness, box.x, box.y, box.layers
+    fh, fw = box.frameheight, box.framewidth
+    H = L * t + box.extraheight
+    rear = t + H                                         # the case walls' back end
+    fwd = (0, -1, 0)
+    out = []
+    for i in range(L):
+        yl = t + i * t
+        out += [(parts[2 * i], Placement((0, yl, t), X, Z, -1)),
+                (parts[2 * i + 1], Placement((x, yl, t + y), (-1, 0, 0), (0, 0, -1), -1)),
+                (parts[2 * L + 2 * i], Placement((0, yl, t + fh), Z, X, 1)),
+                (parts[2 * L + 2 * i + 1], Placement((x - fw, yl, t + fh), Z, X, 1))]
+    face = parts[4 * L:4 * L + 4]
+    out += [(face[0], Placement((-t, 0, 0), Z, X, 1)),
+            (face[1], Placement((x + t, 0, y + 2 * t), (0, 0, -1), (-1, 0, 0), 1)),
+            (face[2], Placement((-t, 0, 0), X, Z, -1)),
+            (face[3], Placement((x + t, 0, y + 2 * t), (-1, 0, 0), (0, 0, -1), -1))]
+    case = parts[4 * L + 4:4 * L + 8]
+    out += [(case[0], Placement((0, rear, t), X, fwd, 1)), (case[1], Placement((0, rear, t + y), X, fwd, -1)),
+            (case[2], Placement((0, rear, t), Z, fwd, -1)), (case[3], Placement((x, rear, t), Z, fwd, 1))]
+    ring = parts[4 * L + 8:4 * L + 12]
+    out += [(ring[0], Placement((t, rear, 2 * t), X, fwd, 1)), (ring[1], Placement((t, rear, y), X, fwd, -1)),
+            (ring[2], Placement((t, rear, 2 * t), Z, fwd, -1)), (ring[3], Placement((x - t, rear, 2 * t), Z, fwd, 1))]
+    backs = parts[4 * L + 12:]
+    for p, yb in zip(backs, [rear + t, rear] if box.back_edge == "E" else [rear]):
+        out.append((p, Placement((0, yb, t), X, Z, -1, lid=True)))
+    return out
+
+
+@decoration("Shadowbox", "paper")
+def _shadowbox_back_layer(box):
+    """The blank back paper layer, behind the last frame (the cut paper layers between the
+    frames are the user's art: left out)."""
+    t = box.thickness
+    return Placement((0, t + box.layers * t, t), X, Z, -1).pieces([rect(0, 0, box.x, box.y)], 0.2)
+
+
+def _fatballdispenser_layout(box):
+    """What the recipe and the decorations share: n, the radii render() works out, the cage's
+    inner height (2.4 balls: not a parameter; the reference build's poles are 190 mm) and the
+    corner angles (degrees) of the polygons, all turned alike: the first side at the front."""
+    n, t = box.sides, box.thickness
+    ar_base = math.radians((180 - 360 / n) / 2)
+    r_clearance = box.pole_clearance / math.sin(ar_base)
+    r_pole = box.pole_diameter / 2
+    r_poles = box.ball_diameter / 2 + max(r_pole, r_clearance) + r_pole
+    r_floor = r_poles + r_pole + max(box.balcony_width, r_clearance, r_pole)
+    r_ceiling = r_poles + r_pole + max(r_clearance, r_pole)
+    corners = [-90 - 180 / n + k * 360 / n for k in range(n)]
+    return SimpleNamespace(n=n, r_poles=r_poles, r_floor=r_floor, r_ceiling=r_ceiling,
+                           r_roof=r_floor + box.roof_overhang, H=2.4 * box.ball_diameter, corners=corners)
+
+
+@recipe
+def FatBallDispenser(box, parts):
+    """Centred on the Z axis, every polygon turned alike (its first side, local v = 0, at
+    the front): the floor on Z = 0, the balcony walls standing in its F edge (outer face on its
+    outer edge, u from the left as seen from outside; the chamfers to sand are not modelled, their
+    corners overlap inside), the ceiling 2.4 balls above the floor (see the layout), in the
+    spacer's U on the bracket's lip, the roof bottom plate on the spacer, the roof tiles on it
+    from its edges up to the apex roof_height above (their base on its top face), and the roof
+    support inside the roof where the tiles' inner faces meet its edge."""
+    t = box.thickness
+    g = _fatballdispenser_layout(box)
+    n, H = g.n, g.H
+    a = math.pi / n
+
+    def polygon(r, z, edge="e"):
+        """A regularPolygonWall (or a lock part) r round, centred on the Z axis, its bottom at z."""
+        sw = box.edges[edge].startWidth() if edge != "e" else 0
+        return Placement((-r * math.sin(a), -r * math.cos(a) - sw, z), X, Y, 1)
+
+    flat = [p for p in parts if p.record.caller == "render"]          # ceiling, roof base, floor[, support]
+    walls = [p for p in parts if p.record.caller == "balcony_wall"]
+    locks = [p for p in parts if p.record.caller == "lock_part"]      # spacer, bracket
+    tiles = [p for p in parts if p.record.caller == "roof_tile"]
+    top = 3 * t + H                                                    # the roof bottom plate's top face
+    r_outer = g.r_ceiling + box.slide_clearance + box.spacer_width
+    out = [(flat[0], polygon(g.r_ceiling, t + H)), (flat[1], polygon(g.r_roof, 2 * t + H)),
+           (flat[2], polygon(g.r_floor, 0, "F" if walls else "e")),
+           (locks[0], polygon(r_outer, t + H)), (locks[1], polygon(r_outer, H))]
+    h_floor, h_roof = g.r_floor * math.cos(a), g.r_roof * math.cos(a)
+    L = 2 * (h_floor + t) * math.tan(a)                                # a wall's length: the floor's outer side
+    for k, (p, tile) in enumerate(zip(walls or [None] * n, tiles)):
+        phi = math.radians(-90 + k * 360 / n)
+        nk, tk = (math.cos(phi), math.sin(phi), 0), (-math.sin(phi), math.cos(phi), 0)
+        if p is not None:
+            out.append((p, Placement(_add(_add((0, 0, t), nk, h_floor + t), tk, -L / 2), tk, Z, -1)))
+        up = _norm(_add((0, 0, box.roof_height), nk, -h_roof))
+        out.append((tile, Placement(_add(_add((0, 0, top), nk, h_roof), tk, -g.r_roof * math.sin(a)), tk, up, -1)))
+    if len(flat) > 3:  # the support: its bottom face's edge on the tiles' inner faces
+        r_s = box.roof_support_fraction * g.r_roof
+        slope = math.atan2(box.roof_height, h_roof)
+        z = top + box.roof_height * (1 - (r_s * math.cos(a) + t / math.sin(slope)) / h_roof)
+        out.append((flat[3], polygon(r_s, z)))
+    return out
+
+
+@decoration("FatBallDispenser", "dowel")
+def _fatballdispenser_poles(box):
+    """The poles (beech rods) at the polygons' corners, through the floor and the ceiling."""
+    t, g = box.thickness, _fatballdispenser_layout(box)
+    return [p for c in g.corners
+            for p in _rod("dowel", (0, 0, 0), Z, X, (g.r_poles * math.cos(math.radians(c)),
+                                                      g.r_poles * math.sin(math.radians(c))),
+                          box.pole_diameter / 2, 0, 2 * t + g.H)]
+
+
+@decoration("FatBallDispenser", "cardboard")
+def _fatballdispenser_balls(box):
+    """Two fat balls stacked on the floor, as slices."""
+    t, r = box.thickness, box.ball_diameter / 2 - 1
+    out, k = [], 12
+    for b in range(2):
+        z0 = t + b * 2 * r
+        for i in range(k):
+            zc = -r + (i + 0.5) * 2 * r / k
+            out += _solid("cardboard", Placement((0, 0, z0 + r + zc - r / k), X, Y, 1),
+                          Point(0, 0).buffer(math.sqrt(r * r - zc * zc), quad_segs=8), 2 * r / k)
+    return out
+
+
+KAMISHIBAI_DOORS_OPEN = 100  # degrees the two-part front doors are shown open by (the window behind them)
+
+
+@recipe
+def Kamishibai(box, parts):
+    """The sheets' slot wi × di × hi between the front wall (Y = 0, its window) and the back wall,
+    on the bottom plate, under the top plate (both u = X from -4t, v from the back). The extra
+    depths: strips in the plates' side finger holes (X -t..0 and wi..wi+t) behind the back wall
+    and in front of the front wall; the side panels slide in at X -3t..-2t (and wi + 2t), Y 0..di,
+    their two inner plates behind them filling X -2t..0, a peg through the three at each hole; the
+    back panel slides in behind the back strips (seen from the back), the slide-on front panel in
+    front of the front strips. The handle: its ceiling in the walls' finger holes 1.5t under the
+    top, the HandleThickness plates standing side by side across the middle on it, their tabs in
+    its holes, the four holders lying on it (Y 0..di) through their holes and notches, the grip
+    through the top. The two-part front: the doors outside the plates' front edge, their pins in
+    the plates' hinge eyes, shown opened KAMISHIBAI_DOORS_OPEN degrees; on the left one the main
+    lock (outside: knob, external disc; the disc cut from the door; inside: the internal disc, its
+    round side over the right door), on the right one the top and bottom locks (grip outside;
+    the cut disc; internal, spacer, locker inside, the locker's round side towards the strip
+    standing in the plate behind the door), pegs through the stacks. The three-part cover is never
+    drawn (render() compares the style with a misspelt name). The key hangs on its peg at the back."""
+    t, M, PWM = box.thickness, box.Margin, box.PegsWidthMargin
+    HT, HW = box.HandleThickness, box.HandleWidth
+    hi = box.SheetHeight + 2 * M + (2 * t if HT > 0 else 0)
+    wi, di = box.SheetWidth + M, box.SheetsStackDepth + M
+    bed, fed, style = box.BackExtraDepth, box.FrontExtraDepth, box.FrontCoverStyle
+    back_y, Yo = (0, -1, 0), -(fed + 2) * t               # the front covers' outer face
+    by = lambda c: [p for p in parts if p.record.caller == c]
+    labelled = lambda c, label: [p for p in by(c) if p.record.label == label]
+    solid = lambda c: [p for p in by(c) if _part_polys(p)]  # the locks' moves leave empty parts
+    front, back = by("boxFrontBack")
+    top, bottom = by("boxTopBottom")
+    plate_y = di + (bed + 3) * t                          # the plates' v = 0 (their back edge)
+    out = [(front, Placement((-2 * t, 0, 0), X, Z, 1)), (back, Placement((-2 * t, di, 0), X, Z, -1)),
+           (top, Placement((-4 * t, plate_y, hi), X, back_y, -1)),
+           (bottom, Placement((-4 * t, plate_y, 0), X, back_y, 1))]
+    # the open sides' strips, the first drawn on the right (its N edge with the walls' N)
+    out += [(p, Placement((x0, di + t + p.record.args[1], 0), Z, back_y, s))
+            for p, (x0, s) in zip(labelled("boxOpenSide", "back side"), ((wi, 1), (0, -1)))]
+    out += [(p, Placement((x0, -t - p.record.args[1], 0), Z, Y, s))
+            for p, (x0, s) in zip(labelled("boxOpenSide", "front side"), ((wi, -1), (0, 1)))]
+    panels, inners = labelled("coverPanel1Lid", "side panel"), labelled("coverPanel1Lid", "side panel inner")
+    pegs = labelled("coverPanel1Lid", "")
+    for i, (xo, s) in enumerate(((wi, 1), (0, -1))[:len(panels)]):       # xo: the slot's side, s: outwards
+        out.append((panels[i], Placement((xo + 2 * s * t, 0, 0), Y, Z, s)))
+        out += [(q, Placement((xo + k * s * t, M / 2, 2 * t), Y, Z, s)) for q, k in zip(inners[2 * i:2 * i + 2], (1, 0))]
+        out += [(q, Placement((xo if s > 0 else -3 * t, (di - t - PWM) / 2, z - t / 2), Y, X, -1))
+                for q, z in zip(pegs[2 * i:2 * i + 2], (3.5 * t, hi - 5.5 * t))]
+    if HT > 0 and HW > 0:
+        handle = by("topHandle")
+        plates, holders, ceiling = handle[:HT], handle[HT:HT + 4], handle[-1]
+        out.append((ceiling, Placement((0, -2 * t, hi - 2 * t), X, Y, 1)))
+        out += [(p, Placement((0, (di - HT * t) / 2 + i * t, hi - 2 * t), X, Z, -1)) for i, p in enumerate(plates)]
+        xs = (t, (wi - HW) / 2 + t, (wi + HW) / 2 - 4 * t, wi - 4 * t)
+        out += [(p, Placement((x, 0, hi - t), Y, X, -1)) for p, x in zip(holders, xs)]
+    yb = di + (bed + 1) * t                               # the back panel's inner face
+    out += [(p, Placement((wi, yb, 0), (-1, 0, 0), Z, 1)) for p in labelled("coverPanel1Lid", "back panel")]
+    out += [(p, Placement((wi - 2 * t - (t + PWM) / 2, yb, 1.5 * t), Y, X, -1))
+            for p in labelled("coverPanel1Lid", None)]    # the key's peg, out of the back panel
+    out += [(p, Placement((0, -(fed + 1) * t, 0), X, Z, 1)) for p in labelled("coverPanel1Lid", "front panel")]
+
+    def on(pane, at, a=(1, 0, 0), b=(0, 1, 0), d=(0, 0, 1), keep=None):
+        """A piece on a front pane: local (0, 0) at pane (u, v, w) at (w inwards from its outer
+        face), its u, v along a, b and its thickness along d, in the pane's (u, v, w)."""
+        O, Eu, Ev, turn = pane
+        m = lambda c: tuple(c[0] * Eu[i] + c[1] * Ev[i] + c[2] * Y[i] for i in range(3))
+        U, V = m(a), m(b)
+        side = 1 if sum(n * e for n, e in zip(_cross(U, V), m(d))) > 0 else -1
+        place = Placement(_add(O, m(at)), U, V, side, keep=keep)
+        return _turned(place, *turn) if turn else place
+
+    def stack(pane, door, c, r, discs, pegs_):
+        """A lock round the hole at c (r round) of door: discs [(part, w, a, b)], the disc cut
+        from the door in its place, pegs [(part, u offset)] through the stack from its outer face."""
+        w0 = min(w for _, w, _, _ in discs)
+        res = [(p, on(pane, (c[0], c[1], w), a, b)) for p, w, a, b in discs]
+        res.append((_hinge_disc(door, c, r + 0.5), on(pane, (0, 0, 0))))
+        return res + [(p, on(pane, (c[0] + du - (t + PWM) / 2, c[1] - t / 2, w0), (0, 0, 1), (1, 0, 0), (0, 1, 0)))
+                      for p, du in pegs_]
+
+    key = solid("lockWithKey")
+    if style == "two-part lid with hinge eyes (both ends)":
+        right, left = by("coverPanel2Side")
+        tabs = _part_polys(left)[0].intersection(rect(-20, hi + 0.5, wi, hi + 20))   # the pin, then the outset top
+        pin = min(getattr(tabs, "geoms", [tabs]), key=lambda g: g.bounds[0]).centroid.x
+        a = KAMISHIBAI_DOORS_OPEN
+        lpane = ((-3 * t, Yo, 0), X, Z, ((-3 * t + pin, Yo + t / 2, 0), Z, -a))
+        rpane = ((wi + 3 * t, Yo, 0), (-1, 0, 0), Z, ((wi + 3 * t - pin, Yo + t / 2, 0), Z, a))
+        out += [(right, on(rpane, (0, 0, 0))), (left, on(lpane, (0, 0, 0)))]
+        quarter, half = ((0, 1, 0), (-1, 0, 0)), ((-1, 0, 0), (0, -1, 0))   # a disc's x along the pane's v / -u
+        if key:   # external, front, internal (its side holes along x), two pegs, key
+            out += stack(lpane, left, ((wi - M) / 2 - 1.5 * t, hi / 2), 3.5 * t,
+                         [(key[1], -2 * t, *quarter), (key[0], -t, *quarter), (key[2], t, *half)],
+                         [(key[3], -2 * t), (key[4], 2 * t)])
+        simple = solid("lockSimple")
+        if simple:   # external, grip, internal, peg
+            out += stack(lpane, left, ((wi - M) / 2, hi / 2), 2 * t,
+                         [(simple[1], -2 * t, X, Y), (simple[0], -t, X, Y), (simple[2], t, *half)], [(simple[3], 0)])
+        extra = solid("lockExtra")   # grip, internal, spacer, locker, peg; top then bottom
+        for i, (v, flat) in enumerate(((hi - 4 * t, ((0, -1, 0), (1, 0, 0))), (4 * t, quarter))[:len(extra) // 5]):
+            g, inner, spacer, locker, peg = extra[5 * i:5 * i + 5]
+            out += stack(rpane, right, ((wi - M) / 2 - t, v), 2 * t,
+                         [(g, -t, X, Y), (inner, t, X, Y), (spacer, 2 * t, X, Y), (locker, 3 * t, *flat)], [(peg, 0)])
+        if extra:   # the strips the lockers catch, standing on the bottom and hanging from the top
+            x0 = wi / 2 - 8 * t
+            out += list(zip(by("render"), [Placement((x0, -fed * t, 0), X, Z, -1),
+                                           Placement((x0, -fed * t, hi), X, (0, 0, -1), 1)]))
+    if len(key) > 5:  # the key, hung on its peg by its hole
+        out.append((key[5], Placement((wi - 0.5 * t, yb + t, 0.5 * t), (-1, 0, 0), Z, 1)))
+    for item in out:  # Z = 0 was the bottom plate's top face: the box on the floor
+        item[1].origin = _add(item[1].origin, Z, t)
+    return out
+
+
+@decoration("Kamishibai", "paper")
+def _kamishibai_sheets(box):
+    """A stack of sheets (half the stack depth) standing in the slot against the front wall."""
+    t, M = box.thickness, box.Margin
+    return Placement((M / 2, 0, t + M), X, Z, -1).pieces([rect(0, 0, box.SheetWidth, box.SheetHeight)],
+                                                         box.SheetsStackDepth / 2)
+
+
 # ---------------------------------------------------------------- driver
 
 def start():
@@ -4618,19 +6097,24 @@ def placed(box):
         items = placed_
     else:
         items = list(zip(parts, placed_))
-    out = []
+    out, sheet = [], {}
     for n, item in enumerate(items):
         part, placement = item[0], item[1]
         if placement is None:
             continue
         local = item[2] if len(item) > 2 else None
         matrix = local if local is not None else local_matrix(part.record)
-        cuts = []
-        loops = loops_of(part, matrix, cuts)
-        if placement.plate is not None:  # only holes: one left open (a fan's swirl arm, by 0.34) is a hole too
-            loops += [c for c in cuts if len(c) > 2 and math.dist(c[0], c[-1]) < 1]
-            cuts = [c for c in cuts if not (len(c) > 2 and math.dist(c[0], c[-1]) < 1)]
-        out.append((n, placement, polygons_of(loops, cuts), matrix))
+        # the outlines once per part, on the sheet: a part placed piece by piece (CarbonFilter's
+        # rows of ribs) would be traced again for each; the local frames only turn and move them
+        key = (id(part), placement.plate is not None)
+        if key not in sheet:
+            cuts = []
+            loops = loops_of(part, Affine.identity(), cuts)
+            if placement.plate is not None:  # only holes: one left open (a fan's swirl arm, by 0.34) is a hole too
+                loops += [c for c in cuts if len(c) > 2 and math.dist(c[0], c[-1]) < 1]
+                cuts = [c for c in cuts if not (len(c) > 2 and math.dist(c[0], c[-1]) < 1)]
+            sheet[key] = polygons_of(loops, cuts)
+        out.append((n, placement, [affine_transform(q, matrix.to_shapely()) for q in sheet[key]], matrix))
     return out, len(parts)
 
 
