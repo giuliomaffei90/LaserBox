@@ -62,14 +62,18 @@ def info(cls):
             "assembled": cls.__name__ in assembly.RECIPES}
 
 
+# The test pieces (BurnTest, FlexTest…) get a category of their own, last.
+TESTS = argparse.Namespace(name="Tests", title="Tests", description="Pieces for trying out the laser settings")
+
+
 def list_generators():
     by_group = {}
     for cls in GENERATORS.values():
-        by_group.setdefault(cls.ui_group, []).append(info(cls))
+        by_group.setdefault(TESTS.name if "test" in cls.__name__.lower() else cls.ui_group, []).append(info(cls))
     return {"groups": [
         {"name": g.name, "title": tr(g.title), "description": tr(g.description),
          "generators": sorted(by_group.get(g.name, []), key=lambda b: b["title"].casefold())}
-        for g in boxes.generators.ui_groups if by_group.get(g.name)]}
+        for g in [*boxes.generators.ui_groups, TESTS] if by_group.get(g.name)]}
 
 
 def label(action, prefix):
@@ -212,7 +216,9 @@ def main():
 
 if __name__ == "__main__":
     if sys.argv[1:] == ["--selftest"]:
-        assert len(list_generators()["groups"]) > 3
+        groups = list_generators()["groups"]
+        assert len(groups) > 3 and groups[-1]["name"] == "Tests"
+        assert {g["name"] for g in groups[-1]["generators"]} == {"BurnTest", "FillTest", "FlexTest", "FlexTest2"}
         spec = generator_args("UniversalBox")
         assert any(a["name"] == "x" for g in spec["groups"] for a in g["args"])
         svg = render("UniversalBox", {"x": "120"}, "svg")

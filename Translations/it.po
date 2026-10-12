@@ -15193,3 +15193,13 @@ msgstr "{name} non disegna nulla"
 #: LaserBox/bridge.py
 msgid "Invalid value for “{label}”: {value}"
 msgstr "Valore non valido per “{label}”: {value}"
+
+#. name of the category the test pieces are moved to
+#: LaserBox/bridge.py
+msgid "Tests"
+msgstr "Test"
+
+#. description of the category the test pieces are moved to
+#: LaserBox/bridge.py
+msgid "Pieces for trying out the laser settings"
+msgstr "Pezzi per provare le impostazioni del laser"

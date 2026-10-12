@@ -12,6 +12,8 @@ the same placed part share its "part" (the exploded view moves them together); d
 not cut (notes, dice…) have none.
 """
 import math
+import re
+import shlex
 from types import SimpleNamespace
 
 from affine import Affine
@@ -27,7 +29,7 @@ import boxes.generators
 
 # ---------------------------------------------------------------- recording
 
-RECORDS = {"current": None, "all": [], "pending": {}, "walls": None, "stack": []}
+RECORDS = {"current": None, "all": [], "pending": {}, "walls": None, "stack": [], "border": None}
 PRIMITIVES = ("rectangularWall", "roundedPlate", "surroundingWall", "flexBoxSide", "trapezoidWall")
 
 
@@ -126,6 +128,14 @@ def install():
         return orig_walls(self, borders, h, recorded, *a, **kw)
 
     boxes.Boxes.polygonWalls = polygonWalls
+
+    orig_fill = boxes.Boxes.fillHoles
+
+    def fillHoles(self, pattern, border, *a, **kw):
+        RECORDS["border"] = border  # HolePattern draws only the holes: the sheet is the border they fill
+        return orig_fill(self, pattern, border, *a, **kw)
+
+    boxes.Boxes.fillHoles = fillHoles
 
     orig_new_part = boxes.drawing.Surface.new_part
 
@@ -288,12 +298,14 @@ class Placement:
     keep(polygon) picks which of the part's pieces go here, when one cut part is several pieces.
     lid marks a lid (the 3D view has a button for them, the gallery leaves them out); decoration
     marks other pieces the 3D view can hide (a removable panel), with that kind; clear pieces are
-    always shown in clear acrylic, whatever the chosen material (a display case's glass)."""
+    always shown in clear acrylic, whatever the chosen material (a display case's glass). plate is the
+    sheet (a polygon in local u, v) for a part that is only holes (a hole pattern): the holes lying in
+    it are cut out of it."""
 
     def __init__(self, origin, U, V, side=1, bends=(), offset=(0, 0), keep=None, decoration=None, lid=False,
-                 clear=False):
+                 clear=False, plate=None):
         self.origin, self.U, self.V, self.side, self.bends, self.offset = origin, _norm(U), _norm(V), side, list(bends), offset
-        self.keep, self.decoration, self.lid, self.clear = keep, decoration, lid, clear
+        self.keep, self.decoration, self.lid, self.clear, self.plate = keep, decoration, lid, clear, plate
 
     def frame_at(self, u):
         """(position of local (u, 0), tangent) walking the bends."""
@@ -317,6 +329,9 @@ class Placement:
     def pieces(self, polys, t):
         if self.keep:
             polys = [p for p in polys if self.keep(p)]
+        if self.plate is not None:
+            sheet = self.plate.difference(unary_union([p for p in polys if p.within(self.plate)]))
+            polys = list(getattr(sheet, "geoms", [sheet]))
         if not self.bends:
             return [self._piece(q, t, 0.0, self.origin, self.U) for p in polys for q in snapped(p)]
         cuts = []
@@ -3531,12 +3546,12 @@ def RollHolder(box, parts):
     arms standing out of it (drawn with u up, v out, the plate's face at v = t), w apart, and
     outside each arm a brace lying flat under the axle (see _right_triangles): one leg along the
     plate, one along the arm. Two plates instead of one: the second turned to the right (drawn
-    mirrored). The rings (no part of their own) are left out."""
+    mirrored). The rings, drawn last, are left out."""
     t, w, d, a, h = box.thickness, box.width, box.diameter, box.axle, box.height
     x0, x1 = h / 4 + t / 2 - 3 * t, h / 4 + t / 2 + t - 3 * t + w     # the arms' mid-planes
     zm = h - 3 * t - a / 2                                            # the braces'
     out = (0, -1, 0)
-    sides, braces, plates = parts[:2], parts[2], parts[3:]
+    sides, braces, plates = parts[:2], parts[2], parts[3:4 if getattr(box, "one_piece", True) else 5]
     items = [(sides[0], Placement((x0 - t / 2, t, 0), Z, out, 1)), (sides[1], Placement((x1 - t / 2, t, 0), Z, out, 1))]
     corners = [Placement((x0 - t / 2, 0, zm + t / 2), X, out, 1), Placement((x1 + t / 2, 0, zm - t / 2), (-1, 0, 0), out, 1)]
     for (frame, kept), q in zip(_right_triangles(braces, h / 4, t), corners):
@@ -4052,15 +4067,172 @@ DECORATIONS.setdefault("WallDrillBox", []).append(_drill_bits)
 DECORATIONS.setdefault("DrillStand", []).append(_drill_bits)
 
 
+# ---------------------------------------------------------------- hole patterns
+
+# A hole pattern stands upright, read from the front (u along X, v up, its front face at Y = 0, the
+# thickness behind). The generators draw only the holes: the sheet round them is the recipe's.
+MARGIN = 10  # panel round a fan's or a motor's square
+
+
+def _upright(z=0.0, plate=None, **kw):
+    return Placement((0, 0, z), X, Z, -1, plate=plate, **kw)
+
+
+@recipe
+def FanHole(box, parts):
+    """The fan's holes in a panel MARGIN larger than its square."""
+    d = box.diameter
+    return [_upright(MARGIN, rect(-MARGIN, -MARGIN, d + MARGIN, d + MARGIN))]
+
+
+@decoration("FanHole", "grip-black")
+def fan(box):
+    """A d × d fan behind the panel, 0.3 d deep (25 at most): its frame round the bore, with the
+    mounting holes, and in its middle a hub (inner_disc of the radius) with seven blades."""
+    t, d, i = box.thickness, box.diameter, box.mounting_holes_inset
+    depth, c, r = min(25.0, 0.3 * d), (d / 2, d / 2), 0.47 * d
+    screws = [Point(p, q).buffer(box.mounting_holes / 2, quad_segs=6) for p in (i, d - i) for q in (i, d - i)]
+    frame = rect(0, 0, d, d).difference(unary_union([Point(c).buffer(r, quad_segs=24)] + screws))
+    hub = max(box.inner_disc, 0.15) * d / 2
+
+    def polar(rr, a):
+        return c[0] + rr * math.cos(math.radians(a)), c[1] + rr * math.sin(math.radians(a))
+
+    blades = [Polygon([polar(0.8 * hub, a), polar(r - 1.5, a + 20), polar(r - 1.5, a + 45), polar(0.8 * hub, a + 30)])
+              for a in (i * 360 / 7 for i in range(7))]
+    rotor = unary_union([Point(c).buffer(hub, quad_segs=12)] + blades)
+    return (_solid("grip-black", Placement((0, t, MARGIN), X, Z, -1), frame, depth) +
+            _solid("grip-black", Placement((0, t + depth * 0.3, MARGIN), X, Z, -1), rotor, depth * 0.4))
+
+
+@recipe
+def NemaPattern(box, parts):
+    """The motor's holes (centred on its square) in a panel MARGIN larger than the square."""
+    w = box.nema_sizes.get(box.size, box.nema_sizes[8])[0]
+    return [_upright(MARGIN, rect(-MARGIN, -MARGIN, w + MARGIN, w + MARGIN))]
+
+
+@decoration("NemaPattern", "grip-black")
+def nema_motor(box):
+    """The stepper behind the panel, as long as it is wide: black end caps round a steel stack, its
+    corners chamfered, the pilot in the flange hole, the shaft through it out of the front."""
+    t = box.thickness
+    w, flange, holes, screws = box.nema_sizes.get(box.size, box.nema_sizes[8])
+    k = 0.12 * w
+    body = Polygon([(k, 0), (w - k, 0), (w, k), (w, w - k), (w - k, w), (k, w), (0, w - k), (0, k)])
+    out = []
+    for y0, y1, kind in ((0, 0.25, "grip-black"), (0.25, 0.75, "steel"), (0.75, 1, "grip-black")):
+        out += _solid(kind, Placement((0, t + y0 * w, MARGIN), X, Z, -1), body, (y1 - y0) * w)
+    out += _solid("grip-black", Placement((0, t - 2, MARGIN), X, Z, -1), Point(w / 2, w / 2).buffer(flange / 2 - 0.3), 2)
+    return out + _rod("steel", (0, 0, 0), Y, X, (w / 2, -(MARGIN + w / 2)), max(1.5, 0.06 * w), -w / 2, t)
+
+
+@recipe
+def HolePattern(box, parts):
+    """The holes in a panel of the shape they fill (the border fillHoles gets)."""
+    return [_upright(0, Polygon(RECORDS["border"]))]
+
+
+@recipe
+def FrontPanel(box, parts):
+    """The layout's outlines side by side, as the generator spaces them (10 apart), each with the
+    holes lying in it. Holes outside every outline are left out."""
+    plates, x0, prev = [], 0.0, None
+    for line in box.layout.splitlines():
+        words = shlex.split(re.sub("#.*$", "", line).strip(), comments=True)
+        if words and words[0].lower() == "outline":
+            if prev is not None:
+                x0 += prev + 10
+            prev = float(words[1])
+            plates.append(rect(x0, 0, x0 + prev, float(words[2])))
+    return [(part, _upright(0, p)) for part in parts[:1] for p in plates]
+
+
+@recipe
+def SevenSegmentPattern(box, parts):
+    """The plate with the segments in front (Y 0..t), the separators behind it standing h deep in
+    the finger holes of the back plate. The generator draws neither plate: both are the separators'
+    outline and t more round it. The separators, drawn in pairs by length, go where
+    seven_segment_holes puts their holes, twice (the second half turned 180° about the middle), each
+    centred on its holes (the second length is drawn 0.8 shorter than its holes)."""
+    t, x, h = box.thickness, box.digit, box.h
+    l, w, d = 0.4 * x, 0.05 * x, 0.05 * x
+    width = l + 2 * w + d
+    lines = [(t / 4 * 2 ** .5, x / 2 + w - t / 4 * 2 ** .5, 2 ** .5 * (width - t) - t / 2, -45),
+             (t, t, 2 ** .5 * (.55 * x / 2 - t) - t / 2, 45),
+             (width / 2 + t / 2 ** .5 / 2, width / 2 + t / 2 ** .5 / 2, 2 ** .5 * (l / 2 + d / 2) - 1.5 * t, 45),
+             (-t / 2, x / 2 + 0.25 * t, x / 2 - 0.25 * t, 90),
+             (-t / 2, 0, x / 2 - 0.25 * t, 90),
+             (-t, -t / 2, l + 2 * w + d + 2 * t, 0)]
+    plate = rect(-2 * t, -2 * t, width + 2 * t, x + 2 * t)
+    dx = width + box.spacing + t  # the holes are drawn right of the segments, t up
+    out = [(parts[0], _upright(2 * t, plate, keep=lambda p: p.centroid.x < width + 1), None),
+           (parts[0], Placement((0, t + h, 2 * t), X, Z, -1, plate=plate, keep=lambda p: p.centroid.x > -2 * t),
+            Affine.translation(-dx, -t))]
+    turtle = Affine.identity()
+    for half in range(2):
+        for k, (x0, y0, length, a) in enumerate(lines):
+            wall = parts[1 + 2 * k + half]
+            (px, py), a = turtle * (x0, y0), math.radians(a + 180 * half)
+            U = (math.cos(a), 0, math.sin(a))
+            N = (math.sin(a), 0, -math.cos(a))  # U × -Y: the side the thickness goes
+            o = _add(_add((px, t + h, 2 * t + py), U, (length - wall.record.args[0]) / 2), N, -t / 2)
+            out.append((wall, Placement(o, U, (0, -1, 0), 1), None))
+        turtle *= Affine.translation(width, x) * Affine.rotation(180)
+    return out
+
+
+# ---------------------------------------------------------------- test pieces
+
+@recipe
+def BurnTest(box, parts):
+    """Each pair tried as meant: the piece with the counterpart edges (F) flat, the one with fingers
+    (f) standing on its back edge (the F piece turned round, its drawn bottom edge at the back), its
+    fingers in the notches; the pairs side by side. Neither has
+    a part of its own: each is picked out of the drawing by where the generator starts it (the f
+    piece at its inner corner, the F piece t in from its outer corner, at y 0)."""
+    t, x, s = box.thickness, box.x, box.spacing
+    near = lambda cx: (lambda p: abs(p.centroid.x - cx) < x / 2)
+    out = []
+    for c in range(box.pairs):
+        ax = t + 2 * c * (x + 2 * t + s)
+        bx = ax + x + t + s  # the F piece's outer corner
+        ox = c * (x + 2 * t + 20)
+        out += [(parts[0], Placement((ox + x + 2 * t, t, 0), (-1, 0, 0), (0, -1, 0), 1, keep=near(x / 2 + t)),
+                 Affine.translation(-bx, 0)),
+                (parts[0], Placement((ox + t, 0, t), X, Z, -1, keep=near(x / 2)), Affine.translation(-ax, -t))]
+    return out
+
+
+@recipe
+def FillTest(box, parts):
+    """The sample lying flat."""
+    return [Placement((0, 0, 0), X, Y, 1)]
+
+
+@recipe
+def FlexTest(box, parts):
+    """The strip on its long edge, bent a quarter turn over its flex (x long, 10 in from the end;
+    the generator starts at 5, 5)."""
+    return [Placement((-5, 0, -5), X, Z, 1, bends=[(15, 15 + box.x, 90, box.x / (math.pi / 2))])]
+
+
+@recipe
+def FlexTest2(box, parts):
+    """The sample on its edge, bent a quarter turn over its whole width (the flex covers it)."""
+    return [Placement((0, 0, 0), X, Z, 1, bends=[(0, box.x, 90, box.x / (math.pi / 2))])]
+
+
 # ---------------------------------------------------------------- driver
 
 def assemble(box):
     """Runs the generator with the recording hooks and returns the placed pieces."""
     install()
-    RECORDS.update(all=[], current=None, pending={}, walls=None, stack=[])
+    RECORDS.update(all=[], current=None, pending={}, walls=None, stack=[], border=None)
     box.reference = 0  # the reference rectangle (bottom left of the sheet) is never part of the box
     box.open()
     box.render()
+    box.ctx.stroke()  # the last path drawn (a fan's swirl) is stroked only by close()
     merged = {}  # one part per record: a part interrupted by a nested one continues in a new one
     for p in box.ctx._dwg.parts:
         if p.pathes and getattr(p, "record", None) is not None:
@@ -4084,7 +4256,11 @@ def assemble(box):
         local = item[2] if len(item) > 2 else None
         matrix = local if local is not None else local_matrix(part.record)
         cuts = []
-        polys = polygons_of(loops_of(part, matrix, cuts), cuts)
+        loops = loops_of(part, matrix, cuts)
+        if placement.plate is not None:  # only holes: one left open (a fan's swirl arm, by 0.34) is a hole too
+            loops += [c for c in cuts if len(c) > 2 and math.dist(c[0], c[-1]) < 1]
+            cuts = [c for c in cuts if not (len(c) > 2 and math.dist(c[0], c[-1]) < 1)]
+        polys = polygons_of(loops, cuts)
         pieces += [dict(p, part=n) for p in placement.pieces(polys, box.thickness)]
     name = type(box).__name__
     for fn in DECORATIONS.get(name, []):

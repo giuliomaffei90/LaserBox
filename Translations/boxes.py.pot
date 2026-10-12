@@ -13020,3 +13020,13 @@ msgstr ""
 #: LaserBox/bridge.py
 msgid  "Invalid value for “{label}”: {value}"
 msgstr ""
+
+#. name of the category the test pieces are moved to
+#: LaserBox/bridge.py
+msgid  "Tests"
+msgstr ""
+
+#. description of the category the test pieces are moved to
+#: LaserBox/bridge.py
+msgid  "Pieces for trying out the laser settings"
+msgstr ""

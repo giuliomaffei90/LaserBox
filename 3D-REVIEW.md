@@ -1,7 +1,7 @@
 # 3D: punti da rivedere
 
-Annotazioni raccolte mentre facevo le viste 3D (mensole e scaffali, modelli da parete), le
-decorazioni e l'esploso. Per ognuno: cosa ho fatto, perché è dubbio, cosa si può decidere.
+Annotazioni raccolte mentre facevo le viste 3D (mensole e scaffali, modelli da parete, motivi di fori,
+pezzi di test), le decorazioni e l'esploso. Per ognuno: cosa ho fatto, perché è dubbio, cosa si può decidere.
 
 ## Pezzi lasciati fuori
 
@@ -14,8 +14,10 @@ decorazioni e l'esploso. Per ognuno: cosa ho fatto, perché è dubbio, cosa si p
 - **StorageRack** con bordo superiore `S`: il secondo ripiano pieno non ha dove agganciarsi ed è
   lasciato fuori.
 - **SkadisBoard**: le 8 rondelle non hanno una posizione data.
-- **RollHolder / WallRollHolder**: i due anelli dell'asse non sono un pezzo a sé nel disegno (finiscono
-  dentro la piastra) e non compaiono; manca anche l'asse (tassello/tubo, non tagliato).
+- **RollHolder / WallRollHolder**: i due anelli dell'asse ora arrivano al 3D (erano l'ultimo tracciato
+  del disegno, che andava perso) ma non sono ancora posizionati: non compaiono. L'asse c'è come
+  decorazione.
+- **FrontPanel**: i fori fuori da ogni `outline` non sono mostrati; senza `outline` il 3D è vuoto.
 - **SkadisStand**: il generatore disegna un solo piede, il pannello ne vuole due: ne mostro uno.
 - **WineRack** `walls=minimal`: il generatore disegna più pareti di quante ne abbiano i fori (30
   contro 22 con i valori predefiniti); quelle in più non sono mostrate.
@@ -36,6 +38,11 @@ decorazioni e l'esploso. Per ognuno: cosa ho fatto, perché è dubbio, cosa si p
   (lunghezze scambiate); lo mostro appoggiato sopra, orientato come il ripiano.
 - **WallPliersHolder**: i rinforzi interni sono centrati dove il generatore mette i fori, mezzo
   spessore fuori dal confine tra gli scomparti.
+- **SevenSegmentPattern**: il secondo separatore è disegnato 0,8 mm più corto dei suoi fori; l'ho
+  centrato sui fori.
+- **FanHole**: i bracci della girandola restano aperti di 0,34 mm (diametro 80): li chiudo come fori.
+  Con diametri piccoli (40 mm, 10 bracci) i bracci del generatore si incrociano e alcuni fori si
+  fondono.
 - **DisplayShelf** con angolo negativo: i divisori, perpendicolari al ripiano inclinato,
   sporgono dal retro di qualche mm. È la geometria del generatore.
 
@@ -56,6 +63,21 @@ decorazioni e l'esploso. Per ognuno: cosa ho fatto, perché è dubbio, cosa si p
   col cleat francese (WallConsole, WallHook, WallPliersHolder, WallHopper, WallPinRow,
   WallSlottedHolder, WallTypeTray).
 
+- **Motivi di fori**: i generatori disegnano solo i fori, nessun pannello. Il pannello l'ho scelto io:
+  FanHole e NemaPattern quadrato, 10 mm più largo di ventola/motore; HolePattern della forma del
+  bordo che i fori riempiono (senza margine oltre `space_to_border`); FrontPanel i rettangoli degli
+  `outline`, affiancati a 10 mm come nel disegno; SevenSegmentPattern due piastre grandi quanto il
+  contorno dei separatori più uno spessore. Tutti in piedi, letti di fronte.
+- **SevenSegmentPattern**: piastra coi segmenti davanti, separatori infilati nelle fessure della
+  piastra dietro (la foto li mostra smontati). Posizioni dei separatori ricavate ripercorrendo
+  `seven_segment_holes`, coppia per coppia nell'ordine in cui sono disegnati.
+- **BurnTest**: ogni coppia montata ad angolo come nella foto: il pezzo con le tacche (F) a terra,
+  quello con le dita (f) in piedi sul suo bordo posteriore. Si vede un solo incastro per coppia; i
+  pezzi sono riconosciuti da dove il generatore li inizia, perché non ne fa parti separate.
+- **FlexTest / FlexTest2**: piegati di un quarto di giro, col raggio per cui la parte flessibile copre
+  l'arco. FlexTest2 flette in due direzioni: piegarlo su un asse solo è una scelta (una cupola sarebbe
+  più fedele). FillTest è piatto.
+
 ## Decorazioni
 
 - **WineRack**: la spalla della bottiglia è a gradini; nel render Blender si vedono gli anelli.
@@ -63,6 +85,12 @@ decorazioni e l'esploso. Per ognuno: cosa ho fatto, perché è dubbio, cosa si p
 - **DiscRack**: il diametro predefinito del generatore è 150 mm, un LP è 300 mm.
 - **PaintStorage**: nessuna boccetta nel cassetto (non ha fori) né quando il generatore non disegna
   fori (fori più larghi del vassoio).
+- **FanHole**: ventola nera stilizzata dietro il pannello (telaio coi fori, mozzo, 7 pale piatte),
+  profonda 0,3 volte il diametro, al massimo 25 mm.
+- **NemaPattern**: motore passo-passo lungo quanto largo (le lunghezze reali variano), calotte nere,
+  pacco in acciaio, centraggio nel foro grande, albero che esce davanti.
+- Senza contenuto: FrontPanel (pulsanti, il motore NEMA del terzo pannello), HolePattern,
+  SevenSegmentPattern (la striscia LED), i pezzi di test.
 - Colori dei nuovi materiali (bottiglie, barattoli, vinili, colori) da giudicare nell'app.
 
 ## Esploso
@@ -75,6 +103,12 @@ decorazioni e l'esploso. Per ognuno: cosa ho fatto, perché è dubbio, cosa si p
   (`EditorView.swift`).
 
 ## Modifiche trasversali da tenere d'occhio
+
+- `assemble` ora chiude l'ultimo tracciato lasciato aperto dal generatore (come fa `close()`): senza,
+  la girandola di FanHole spariva. Tra i modelli già fatti cambiava solo RollHolder (gli anelli, ora
+  esclusi apposta); gli altri restano identici con i valori predefiniti.
+- `Placement(plate=…)`: per i pezzi fatti di soli fori, i fori che stanno dentro la lastra vengono
+  sottratti dalla lastra.
 
 - Tolleranza di chiusura dei contorni portata da 0,2 a 0,3 mm in `loops_of` (SkadisStand e il
   chiavistello DinRailBox restano aperti di 0,22 mm). Nessun altro modello cambia con i valori
@@ -103,3 +137,4 @@ decorazioni e l'esploso. Per ognuno: cosa ho fatto, perché è dubbio, cosa si p
 ## Ancora da fare
 
 - Modelli da parete e DrillStand: compilati, avviati e pushati; da provare nell'app.
+- Motivi di fori e pezzi di test (nuova categoria "Test", ultima): non compilati; da provare nell'app.
