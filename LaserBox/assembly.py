@@ -186,8 +186,9 @@ KERF = 0.3  # width given to zero-width cuts so they show as slits
 
 
 def polygons_of(loops, cuts=()):
-    """Groups loops into polygons with holes by nesting depth (even-odd: a loop inside a hole is a
-    separate piece, like the inner ring cut out of a disc); open cuts are subtracted as thin slits."""
+    """Groups loops into polygons with holes by nesting depth (even-odd: a loop filling most of a
+    hole is a separate piece, like the inner ring cut out of a disc; a small one is scrap); open cuts
+    are subtracted as thin slits."""
     polys = sorted((Polygon(l) for l in loops if len(l) >= 3), key=lambda p: -abs(p.area))
     seen, result = [], []
     for p in polys:
@@ -199,6 +200,8 @@ def polygons_of(loops, cuts=()):
         node = {"poly": p, "holes": []}
         if len(inside) % 2:
             inside[-1]["holes"].append(p)  # the smallest loop around it, a piece
+        elif inside and p.area < 0.5 * inside[-1]["poly"].area:
+            continue  # a cut inside a hole (a pin's key in its bearing) falls out with it
         else:
             result.append(node)
         seen.append(node)
@@ -215,10 +218,11 @@ def polygons_of(loops, cuts=()):
 
 
 def snapped(poly):
-    """The polygon on a 1 µm grid, as clean polygons. SceneKit drops a whole piece over near-duplicate
-    points (where angled finger joints meet), float noise, and slivers left where a flex cut meets a
-    strip's edge; snapping with topology repair removes all three (and may split a piece)."""
-    g = set_precision(poly, 0.001)
+    """The polygon, simplified within 10 µm and on a 1 µm grid, as clean polygons. SceneKit drops a
+    whole piece over µm-short edges (the burn's tiny corner arcs), near-duplicate points (where
+    angled finger joints meet), float noise, and slivers left where a flex cut meets a strip's edge;
+    snapping with topology repair removes them (and may split a piece)."""
+    g = set_precision(poly.simplify(0.01), 0.001)
     return [q for q in getattr(g, "geoms", [g]) if q.geom_type == "Polygon" and q.area > 1e-6]
 
 
@@ -579,6 +583,19 @@ def Console(box, parts):
     return out
 
 
+def _latch_hardware(t, x, wall_y, inward, z_left, z_right, decoration=None):
+    """Console2's latches on a removable wall's inner face at Y = wall_y, the box towards +Y when
+    inward = 1: per side a latch, flat and t thick at its height, its knob out through the wall,
+    its tip in the side wall (X -t… / …x + t), through two U clamps standing in the wall's H slot
+    (X 2t…3t and 5t…6t from the side). Returns the two latches, then the four clamps."""
+    i = (0, inward, 0)
+    oy = wall_y - inward * t  # their v = 0: the wall's outer face
+    return [Placement((7 * t, oy, z_left - t / 2), (-1, 0, 0), i, -inward, decoration=decoration),
+            Placement((x - 7 * t, oy, z_right - t / 2), X, i, inward, decoration=decoration)] + \
+           [Placement((x0, oy, z + 2 * t), (0, 0, -1), i, inward, decoration=decoration)
+            for x0, z in ((2 * t, z_left), (5 * t, z_left), (x - 3 * t, z_right), (x - 6 * t, z_right))]
+
+
 @recipe
 def Console2(box, parts):
     """Profile sides (drawn from the feet, the floor startWidth higher; side u, v = world Y, Z), floor,
@@ -633,10 +650,7 @@ def Console2(box, parts):
     if box.removable_backwall:
         lp = box.latchpos
         zl, zr = hh - lp, hh - lp - 0.15 * t   # the right H slot sits 0.15 t lower
-        out.append((hardware.pop(0), Placement((7 * t, -t, zl - t / 2), (-1, 0, 0), Y, -1, decoration=back)))
-        out.append((hardware.pop(0), Placement((x - 7 * t, -t, zr - t / 2), X, Y, 1, decoration=back)))
-        for x0, z in ((2 * t, zl), (5 * t, zl), (x - 3 * t, zr), (x - 6 * t, zr)):
-            out.append((hardware.pop(0), Placement((x0, -t, z + 2 * t), (0, 0, -1), Y, 1, decoration=back)))
+        out += [(hardware.pop(0), q) for q in _latch_hardware(t, x, 0, 1, zl, zr, back)]
     return out
 
 
@@ -723,6 +737,112 @@ def EngravingFrame(box, parts):
         # the "width" spacers: their notch (1 t … 2 t from the end) half-lapped into the wedge notches
         for s_ in (4 * t, H - 2 * t):
             out.append((queue.pop(0), P((sides[0] - 1.5 * t, *to_frame(*along_back(s_))), X, into, 1)))
+    return out
+
+
+@recipe
+def HalfBox(box, parts):
+    """An L: the bottom along X (0…x), the back standing at X = x, both across Y; triangular
+    supports on the bottom's finger-hole lines (posy as in xHoles). Sturdy: the outer two are larger
+    side panels whose h edges hold the bottom and the back 1.5 t in, the bottom x2 = 2t·x/h from
+    their corner."""
+    t, x = box.thickness, box.x
+    sy = box.sy  # render() pads it with 0 at both ends unless Sturdy
+    width = sum(sy) + (len(sy) - 1) * t
+    centres, pos = [], -t / 2
+    for s in sy[:-1]:
+        pos += s + t
+        centres.append(pos)
+    out = [(parts[0], Placement((0, 0, 0), X, Y, -1)), (parts[1], Placement((x, 0, 0), Z, Y, -1))]
+    rest = parts[2:]
+    if box.Sturdy:
+        x2 = 2 * t * x / box.h
+        out += [(rest[0], Placement((-x2, 0, -2 * t), X, Z, 1)), (rest[1], Placement((-x2, width, -2 * t), X, Z, -1))]
+        rest = rest[2:]
+    # a support's base fingers hang t below its corner
+    out += [(p, Placement((0, c + t / 2, -t), X, Z, 1)) for p, c in zip(rest, centres)]
+    return out
+
+
+@recipe
+def Rack19HalfWidth(box, parts):
+    """Front at y = 0 with one rack ear (on the shallow side), trapezoid bottom and top (deep at
+    X = 0, shallow at X = x), the deep and the shallow side. The front's wall starts t in from its
+    drawn corner, past the left and bottom F edges."""
+    t, x, h = box.thickness, box.x, box.y
+    front, bottom, top, deep, shallow = parts[:5]
+    return [
+        (front, Placement((0, 0, 0), X, Z, 1), ~(front.record.matrix * Affine.translation(t, t))),
+        (bottom, Placement((0, 0, 0), X, Y, -1)),
+        (top, Placement((0, 0, h), X, Y, 1)),
+        (deep, Placement((0, 0, 0), Y, Z, -1)),
+        (shallow, Placement((x, 0, 0), Y, Z, 1)),
+    ]
+
+
+@recipe
+def PirateChest(box, parts):
+    """Box x × y (front at y = 0), all walls up to the rim h + hy; the chest hinge's axis runs along X
+    at the rim, t behind the back wall. The parts are drawn as seen from outside, so the left wall and
+    lid end run back → front. The lid, closed: its ends stand on the side walls with the axis at
+    their back corner, and its panels go round the half polygon — back (its pins in the hinge),
+    n - 2 top panels, front — each from one corner of the lid end to the next, outside it."""
+    t = box.thickness
+    walls = {p.record.label: p for p in parts if p.record.label}
+    x, h = walls["front"].record.args[:2]
+    y = walls["right"].record.args[0]
+    rim = h + box.edges["O"].startWidth()
+    pm = box.edges["P"].startWidth()            # the lid's straight base is pm above its bottom edge
+    n = box.n
+    _, _, side = box.regularPolygon((n - 1) * 2, h=y / 2.0)
+    corners = [(y, pm), (y, pm + side / 2)]     # (Y, Z above the rim), back → front
+    for i in range(1, n - 1):
+        a = math.radians(90 + i * 180 / (n - 1))
+        corners.append((corners[-1][0] + side * math.cos(a), corners[-1][1] + side * math.sin(a)))
+    corners.append((0, 0))
+    out = [
+        (walls["Bottom"], Placement((0, 0, 0), X, Y, -1)),
+        (walls["front"], Placement((0, 0, 0), X, Z, 1)),
+        (walls["back"], Placement((x, y, 0), (-1, 0, 0), Z, 1)),
+        (walls["right"], Placement((x, 0, 0), Y, Z, 1)),
+        (walls["left"], Placement((0, y, 0), (0, -1, 0), Z, 1)),
+    ]
+    panels = [walls["lid back"]] + [p for p in parts if p.record.label == "lid top"] + [walls["lid front"]]
+    for p, (a, b) in zip(panels, zip(corners, corners[1:])):
+        d = _norm((0, b[0] - a[0], b[1] - a[1]))
+        out.append((p, Placement((0, a[0], rim + a[1]), X, d, -1)))
+    lid_left, lid_right = [p for p in parts if not p.record.label][-2:]
+    out.append((lid_left, Placement((0, y + t, rim), (0, -1, 0), Z, 1)))   # axis at its (0, 0)
+    out.append((lid_right, Placement((x, -t, rim), Y, Z, 1)))              # axis at its (y + 2t, 0)
+    return out
+
+
+@recipe
+def SideDoorHousing(box, parts):
+    """Console2's hatches on the x faces: floor, top, the fixed sides at X = 0 / x (the first as seen
+    from outside), and per door — at Y = y, then (double door) at Y = 0; with a single door Y = 0 is
+    a fixed wall — the strip under it, the door from 1.1 t up (a decoration, with what is fixed to
+    it), its guides and Console2's latches, latchpos below the top."""
+    t, x, y, h = box.thickness, box.x, box.y, box.h
+    lp = box.latchpos
+    doors = 2 if box.double_door else 1
+    q = list(parts)
+    out = [(q.pop(0), Placement((0, 0, 0), X, Y, -1)),     # floor
+           (q.pop(0), Placement((0, 0, h), X, Y, 1)),      # top
+           (q.pop(0), Placement((x, 0, 0), Y, Z, 1)),      # sides
+           (q.pop(0), Placement((0, 0, 0), Y, Z, -1))]
+    faces = [(y, -1), (0, 1)][:doors]                     # (wall Y, into the box)
+    for wy, inward in faces:
+        out.append((q.pop(0), Placement((0, wy, 0), X, Z, inward)))                         # strip
+        out.append((q.pop(0), Placement((0, wy, 1.1 * t), X, Z, inward, decoration="panel")))  # door
+    if not box.double_door:
+        out.append((q.pop(0), Placement((0, 0, 0), X, Z, 1)))                               # fixed wall
+    for wy, inward in faces:   # the guides stand on the door, along its sides
+        for x0 in (0, x - t):
+            out.append((q.pop(0), Placement((x0, wy, 1.1 * t), (0, inward, 0), Z, inward, decoration="panel")))
+    hardware = [_latch_hardware(t, x, wy, inward, h - lp, h - lp - 0.1 * t, "panel") for wy, inward in faces]
+    out += [(q.pop(0), p) for hw in hardware for p in hw[:2]]   # drawn: all latches, then all clamps
+    out += [(q.pop(0), p) for hw in hardware for p in hw[2:]]
     return out
 
 
