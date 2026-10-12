@@ -108,18 +108,24 @@ def generator_args(name):
     return {**info(type(box)), "description": description, "groups": groups}
 
 
+def configure(box, args):
+    """The generator's arguments, and what the web form would add."""
+    box.parseArgs([f"--{k}={v}" for k, v in args.items()])
+    if isinstance(box, boxes.generators.traylayout.TrayLayout) and not hasattr(box, "generate_layout"):
+        # An empty layout means "every compartment from sx and sy", like the web form's first step
+        # (GridfinityTrayLayout makes its own).
+        def generate_layout():
+            skeleton = TrayLayoutFile()
+            skeleton.fillDefault(box.sx, box.sy)
+            return str(skeleton)
+        box.generate_layout = generate_layout
+
+
 def render(name, args, fmt):
     box = make(name)
     box.translations = TRANSLATIONS
     try:
-        box.parseArgs([f"--{k}={v}" for k, v in args.items()])
-        if isinstance(box, boxes.generators.traylayout.TrayLayout):
-            # An empty layout means "every compartment from sx and sy", like the web form's first step.
-            def generate_layout():
-                skeleton = TrayLayoutFile()
-                skeleton.fillDefault(box.sx, box.sy)
-                return str(skeleton)
-            box.generate_layout = generate_layout
+        configure(box, args)
         box.open()
         box.render()
     except Exception as e:
@@ -184,7 +190,7 @@ def handle(req):
         box = make(req["name"])
         box.translations = TRANSLATIONS
         try:
-            box.parseArgs([f"--{k}={v}" for k, v in req.get("args", {}).items()])
+            configure(box, req.get("args", {}))
             return assembly.assemble(box)
         except Exception as e:
             raise ValueError(translate_error(str(e), box)) from e
