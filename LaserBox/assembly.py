@@ -6,7 +6,8 @@ recipe per generator says where each part goes. Flexed regions are bent by slici
 narrow strips that follow an arc.
 
 Protocol: assemble(name, args) -> {"pieces": [{"rings": [[[u, v], …], …], "origin": [x, y, z],
-"u": [..], "v": [..], "side": ±1, "t": thickness[, "decoration": kind][, "lid": true]}, …], "turn": degrees}  — world(u, v, w) = origin + u·U + v·V + w·side·(U×V)
+"u": [..], "v": [..], "side": ±1, "t": thickness[, "decoration": kind][, "lid": true]}, …], "turn": degrees,
+"galleryLids": bool}  — world(u, v, w) = origin + u·U + v·V + w·side·(U×V)
 """
 import math
 from types import SimpleNamespace
@@ -341,6 +342,8 @@ def local_matrix(record):
 RECIPES = {}
 # Degrees about the vertical the gallery turns a box by, so its front faces the viewer.
 TURN = {"Console": 180, "Console2": 180}
+# Boxes the gallery shows with their lid (it leaves lids out otherwise): an opened one says what it is.
+GALLERY_LIDS = {"IntegratedHingeBox"}
 
 
 def recipe(fn):
@@ -1506,4 +1509,5 @@ def assemble(box):
         polys = polygons_of(loops_of(part, matrix, cuts), cuts)
         pieces += placement.pieces(polys, box.thickness)
     pieces += DECORATIONS.get(type(box).__name__, lambda b: [])(box)
-    return {"pieces": pieces, "count": len(parts), "turn": TURN.get(type(box).__name__, 0)}
+    name = type(box).__name__
+    return {"pieces": pieces, "count": len(parts), "turn": TURN.get(name, 0), "galleryLids": name in GALLERY_LIDS}

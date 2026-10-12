@@ -362,7 +362,7 @@ struct AssemblyView: NSViewRepresentable {
     let key: String          // changes when the geometry changes
     var material = SheetMaterial.standard
     var decorations = true
-    var lids = true  // the gallery shows boxes without them
+    var lids = true
     var interactive = true
     var yaw: CGFloat = 0
     var pitch: CGFloat = 0
@@ -380,13 +380,19 @@ struct AssemblyView: NSViewRepresentable {
 
     func updateNSView(_ view: SCNView, context: Context) {
         let c = context.coordinator
-        let key = "\(key)|\(material.id)|\(decorations)|\(lids)"
+        let shown = { (piece: Piece) in piece.lid == true ? lids : piece.decoration == nil || decorations }
+        // The editor builds every piece, framed on the whole box, and only hides lids and decorations,
+        // so toggling them leaves the camera alone; the gallery leaves them out, framing what it shows.
+        let key = interactive ? "\(key)|\(material.id)" : "\(key)|\(material.id)|\(decorations)|\(lids)"
         if c.key != key {
             c.key = key
             c.spin.childNodes.forEach { $0.removeFromParentNode() }
+            c.optional = []
             let box = SCNNode()
-            for piece in assembly.pieces where piece.lid == true ? lids : piece.decoration == nil || decorations {
-                box.addChildNode(Self.node(for: piece, material: material))
+            for piece in assembly.pieces where interactive || shown(piece) {
+                let node = Self.node(for: piece, material: material)
+                box.addChildNode(node)
+                if piece.lid == true || piece.decoration != nil { c.optional.append((node, piece)) }
             }
             let (minV, maxV) = box.boundingBox
             box.position = SCNVector3(-(minV.x + maxV.x) / 2, -(minV.y + maxV.y) / 2, -(minV.z + maxV.z) / 2)
@@ -402,6 +408,7 @@ struct AssemblyView: NSViewRepresentable {
                 view.pointOfView = c.camera
             }
         }
+        for (node, piece) in c.optional { node.isHidden = !shown(piece) }
         c.spin.eulerAngles = SCNVector3(pitch, yaw, 0)
     }
 
@@ -409,6 +416,7 @@ struct AssemblyView: NSViewRepresentable {
 
     final class Coordinator {
         var key = ""
+        var optional: [(node: SCNNode, piece: Piece)] = []  // lids and decorations, shown or hidden
         var size: CGFloat = 0
         let spin = SCNNode()
         let camera = SCNNode()
