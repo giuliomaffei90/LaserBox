@@ -173,7 +173,7 @@ def loops_of(part, inverse, cuts=None):
     loops, cur, opens = [], [], []  # opens: [points, black]
 
     def flush(path):
-        if len(cur) > 2 and math.dist(cur[0], cur[-1]) < 0.2:  # a corner's kerf offset can leave 0.14
+        if len(cur) > 2 and math.dist(cur[0], cur[-1]) < 0.3:  # a corner's kerf offset can leave 0.14, an outline 0.22
             loops.append(cur[:-1] if len(cur) > 3 else cur)
         elif len(cur) > 1:
             # an outline broken by a hole drawn on the way (SideHingeBox's latch holes) goes on in a
@@ -3242,6 +3242,431 @@ def wine_bottles(box):
         add(capsule, 15.5, 245, 297)
         add(capsule, 16.0, 297, 300)
     return out
+
+
+# ---------------------------------------------------------------- wall mounted
+
+# The wall is the plane Y = t behind the back plate, whose front (inner) face is at Y = 0; what hangs
+# on it reaches out to the front, -Y. A side's wall edge (b: its fingers set back by t) is drawn on its
+# inner frame's line, the back plate's front face.
+
+@recipe
+def WallConsole(box, parts):
+    """The back plate (x × h), sides and dividers out from it (trapezoids drawn from the top, u
+    down, v out from the wall: top_depth at the top, bottom_depth at the bottom), and the front
+    plate on their slanted edges, from the bottom up."""
+    t, sx, h, td, bd = box.thickness, box.sx, box.h, box.top_depth, box.bottom_depth
+    x = sum(sx) + t * (len(sx) - 1)
+    down, out = (0, 0, -1), (0, -1, 0)
+    sides = [Placement((0, 0, h), down, out, 1)]
+    pos = 0
+    for s in sx[:-1]:
+        pos += s
+        sides.append(Placement((pos, 0, h), down, out, -1))
+        pos += t
+    sides.append(Placement((x, 0, h), down, out, -1))
+    return [Placement((0, 0, 0), X, Z, -1), Placement((0, -bd, 0), X, (0, bd - td, h), 1)] + sides
+
+
+@recipe
+def WallHook(box, parts):
+    """The hook's two sides (drawn with the wall edge at u = 0, its fingers through the back plate
+    to the wall; v up, the hook at the bottom opening upwards) either side of the back plate (w
+    wide, its flange at the top), a strip lying across the hook's bottom (10 mm out, ht / 2 up) and
+    one standing in its tip."""
+    t, w, ht, hid = box.thickness, box.width, box.hook_thickness, box.hook_inside_diameter
+    total, ro = hid + 2 * ht, hid / 2 + ht
+    out = (0, -1, 0)
+    m = box.edges["b"].margin()
+    return [(parts[0], Placement((0, t, 0), out, Z, 1), _from_margin(parts[0], m)),
+            (parts[1], Placement((w, t, 0), out, Z, -1), _from_margin(parts[1], m)), (parts[2], Placement((0, 0, 0), X, Z, -1)),
+            (parts[3], Placement((0, t - (total - ht / 2) + t / 2, ro - ht / 2), X, Z, 1)),
+            (parts[4], Placement((0, t - 10, ht / 2 - t / 2), X, out, -1))]
+
+
+@recipe
+def WallCaliper(box, parts):
+    """Like WallHook: the two sides (the wall edge at u = 0) either side of the back plate."""
+    t, w = box.thickness, box.width
+    out, m = (0, -1, 0), box.edges["b"].margin()
+    return [(parts[0], Placement((0, t, 0), out, Z, 1), _from_margin(parts[0], m)),
+            (parts[1], Placement((w, t, 0), out, Z, -1), _from_margin(parts[1], m)), (parts[2], Placement((0, 0, 0), X, Z, -1))]
+
+
+@recipe
+def WallPinRow(box, parts):
+    """Sides and supports share one frame: the wall edge at u = 0 (Y = 0), v up. The front plate
+    leans back by the angle, its inner face on the line through T (where the sides' bottom turns up
+    into their front edge) along e; the back plate parallel to it 3t behind; the pin strip between
+    them, square to both, 2t up them, its pins out through the front plate."""
+    t, h, x, n = box.thickness, box.h, box.x, box.hooks
+    a = math.radians(box.angle)
+    hd, e = (0, -math.cos(a), math.sin(a)), (0, math.sin(a), math.cos(a))   # out of the plates, up them
+    T = (0, -(math.sin(a) * h + 4 * t * math.cos(a)), 4 * t * math.sin(a))
+    out = (0, -1, 0)
+    sides = [Placement((0, 0, 0), out, Z, 1)] + \
+        [Placement((i * x / (n - 1) - t / 2, 0, 0), out, Z, -1) for i in range(1, n - 1)] + [Placement((x, 0, 0), out, Z, -1)]
+    m = box.edges["a"].margin()
+    return [(parts[0], Placement(_add(T, e, 1.5 * t), X, tuple(-c for c in hd), 1)),
+            (parts[1], Placement(T, X, e, 1)), (parts[2], Placement(_add(T, hd, -4 * t), X, e, 1))] + \
+        [(p, q, _from_margin(p, m)) for p, q in zip(parts[3:], sides)]
+
+
+@recipe
+def WallPlaneHolder(box, parts):
+    """Two sides on the wall (Y = 0; u out from it, v up) holding between them the bottom the
+    plane stands on, two back strips it leans on (t off the wall) and the holder over its front."""
+    t, w, l, h, hl = box.thickness, box.width, box.length, box.height, box.hold_length
+    out = (0, -1, 0)
+    return [Placement((0, 0, 0), out, Z, 1), Placement((w, 0, 0), out, Z, -1),
+            Placement((0, -2 * t, 2 * t), X, out, 1),
+            Placement((0, -t, 2 * t), X, Z, 1), Placement((0, -t, 2 * t + 0.75 * l), X, Z, 1),
+            Placement((0, -(2 * t + h), 2 * t + l - hl), X, Z, 1)]
+
+
+@recipe
+def WallEdges(box, parts):
+    """The four sample walls of the wall edge types, standing in a row as on the sheet."""
+    return [Placement((i * 70, 0, 0), X, Z, 1) for i in range(len(parts))]
+
+
+@recipe
+def WallRack(box, parts):
+    """The back wall (its front face at Y = y; u = 0 on the side lips' mid-plane, X = -t/2) and a
+    shelf in each section sh, its bottom on the section's bottom: the front lip and the two side
+    lips (trapezoids from the front, front_height down to back_height) stand on it, holding it in
+    their h (or F) edges."""
+    t, x, y, fh, sh = box.thickness, box.x, box.y, box.wall_height, box.sh
+    bh = fh * box.back_height
+    if box.outside:
+        x, y = box.adjustSize(x, "h", "f"), box.adjustSize(y)
+    place = {"back wall": Placement((-t / 2, y, 0), X, Z, -1)}
+    pos = 0
+    for i, s in enumerate(sh):
+        z = pos + t                       # the shelf's top face
+        place.update({f"shelf {i + 1}": Placement((0, 0, z), X, Y, -1),
+                      f"front lip {i + 1}": Placement((0, 0, z), X, Z, 1),
+                      f"right lip {i + 1}": Placement((x, 0, z), Y, Z, 1),
+                      f"left lip {i + 1}": Placement((0, 0, z), Y, Z, -1)})
+        pos += s
+    return place
+
+
+@recipe
+def WallStairs(box, parts):
+    """Profile walls across (drawn from the front, u = Y, the wall at Y = y; the outer ones outside
+    the platforms' h edges, the inner ones in their holes), the platforms on their stepped tops,
+    sh[i] high from the front to the back, and the brace at the bottom of the back."""
+    t, sx, sy, sh, x, y = box.thickness, box.sx, box.sy, box.sh, box.x, box.y
+    out = [Placement((0, sum(sy[:i]), sh[i]), X, Y, 1) for i in range(len(sy))]
+    if box.braceheight:
+        out.append(Placement((0, y - t, 0), X, Z, -1))
+    out.append(Placement((0, 0, 0), Y, Z, -1))
+    pos = 0
+    for s in sx[:-1]:
+        pos += s
+        out.append(Placement((pos, 0, 0), Y, Z, 1))
+        pos += t
+    return out + [Placement((x, 0, 0), Y, Z, 1)]
+
+
+@recipe
+def WallTypeTray(box, parts):
+    """TypeTray with its back on the wall (Y = y): the back seen from outside (its holes mirrored),
+    its C and c edges over the sides' wall joints, the right side drawn from the back; the inner
+    y walls are trapezoids from the front with all_mounts."""
+    t, sx, sy, h = box.thickness, box.sx, box.sy, box.h
+    x = sum(sx) + t * (len(sx) - 1)
+    y = sum(sy) + t * (len(sy) - 1)
+    out = [Placement((0, 0, 0), X, Z, 1), Placement((x, y, 0), (-1, 0, 0), Z, 1)]
+    if box.bottom_edge != "e":
+        out.append(Placement((0, 0, 0), X, Y, -1))
+    pos = 0
+    for s in sy[:-1]:
+        pos += s
+        out.append(Placement((0, pos, 0), X, Z, -1))
+        pos += t
+    out += [Placement((0, 0, 0), Y, Z, -1), Placement((x, y, 0), (0, -1, 0), Z, -1)]
+    pos = 0
+    for s in sx[:-1]:
+        pos += s
+        out.append(Placement((pos, 0, 0), Y, Z, 1))
+        pos += t
+    return list(zip(parts, out))
+
+
+def _right_triangles(part, leg, t, margin=0.0):
+    """rectangularTriangle(…, num=n) draws its triangles in one part, nested in pairs (every other
+    one turned half round), their two legs fingered. For each: (frame, keep) placing it alone, as
+    drawn first: the right angle at local (0, 0), one leg (leg long) along -u, the other along +v,
+    their fingers out of the triangle; a wall edge on the second leg reaches margin past them."""
+    local = local_matrix(part.record)
+    out = []
+    for q in polygons_of(loops_of(part, local)):
+        u0, v0, u1, v1 = q.bounds
+        if v0 < -t / 2:     # its fingers below: the right angle at the bottom right, as drawn
+            frame = Affine.translation(-(u1 - 0.1 - t - margin), -(v0 + t))
+        else:               # turned half round
+            frame = Affine.scale(-1, -1) * Affine.translation(-(u1 - 0.1 - leg), -(v1 - t))
+        out.append((frame * local, lambda p: abs(p.bounds[2] - t - 0.1 - margin) < 1 and abs(p.bounds[1] + t) < 1))
+    return out
+
+
+def _from_margin(part, margin):
+    """The part's local frame for a part drawn from moveTo(margin) of its wall edge: as on a plain
+    wall (margin 0), whatever the wall system's hooks need."""
+    return Affine.translation(-margin, 0) * local_matrix(part.record)
+
+
+def _braced_top(box, parts, depth, xs):
+    """WallSlottedHolder and WallChiselHolder: the back plate on the wall, the slotted top over its
+    top edge (from its slotted front, depth deep), and under it a triangular brace centred on each
+    of xs (see _right_triangles): their f leg under the top, their b leg on the back plate."""
+    t, h = box.thickness, box.h
+    back, top, braces = parts[:3]
+    out = [(back, Placement((0, 0, 0), X, Z, -1)), (top, Placement((0, -depth, h), X, Y, 1))]
+    for (frame, kept), xc in zip(_right_triangles(braces, depth, t, box.edges["b"].margin()), xs):
+        out.append((braces, Placement((xc - t / 2, 0, h), Y, (0, 0, -1), -1, keep=kept), frame))
+    return out
+
+
+@recipe
+def WallSlottedHolder(box, parts):
+    n, wt = box.number, box.tool_width
+    d = min(2 * box.thickness, (wt - box.slot_width) / 4)
+    return _braced_top(box, parts, box.additional_depth + box.slot_depth,
+                       [i * wt + d for i in range(n + 1) if box.brace(i)])
+
+
+@recipe
+def WallChiselHolder(box, parts):
+    n, wt = box.number, box.tooldiameter
+    d = min(2 * box.thickness, (wt - box.holediameter) / 4)
+    return _braced_top(box, parts, box.depth,
+                       [d] + [i * wt for i in range(1, n) if box.brace(i)] + [n * wt - d])
+
+
+@recipe
+def WallPliersHolder(box, parts):
+    """The back plate on the wall (h_t high), braces out from it (drawn with the wall at u = t, the
+    back plate's front face at u = 2t, v up from their bottom tip): the outer two hold the front
+    bar in their h edges, the inner ones in its holes (centred where frontCB puts them). The front
+    bar hangs at the top, y - t to y out from the back plate."""
+    t, sx, y, h, ht = box.thickness, box.sx, box.y, box.h, box.h_t
+    x = sum(sx) + (len(sx) - 1) * t
+    out = (0, -1, 0)
+    braces = [Placement((0, 2 * t, 0), out, Z, 1), Placement((x, 2 * t, 0), out, Z, -1)]
+    braces += [Placement((sum(sx[:i + 1]) + i * t - t / 2, 2 * t, 0), out, Z, -1) for i in range(len(sx) - 1)]
+    m = box.edges["b"].margin()
+    return [(parts[0], Placement((0, -(y - t), ht - h), X, Z, 1)), (parts[1], Placement((0, 0, 0), X, Z, -1))] + \
+        [(p, q, _from_margin(p, m)) for p, q in zip(parts[2:], braces)]
+
+
+@recipe
+def WallWrenchHolder(box, parts):
+    """Two sides from their slotted front (u = 0, depth out) to the wall joint, either side of the
+    back plate's inner width x - 2t (its d edges' holes just outside it)."""
+    t, x, d = box.thickness, box.x, box.depth
+    return [Placement((0, -d, 0), Y, Z, -1), Placement((x - 2 * t, -d, 0), Y, Z, 1), Placement((0, 0, 0), X, Z, -1)]
+
+
+@recipe
+def WallStackableBin(box, parts):
+    """Sides from the front (u = Y; v up, the stackable feet holding the bottom), the back on the
+    wall behind them (Y = y), the bottom drawn from the back. The sides' front edge (j) runs from
+    the bottom's front edge out at the angle to the label's foot, w out and front·h up: the slope
+    lies on it, the label stands on the slope's top. Stabilizer strips as in StackableBin."""
+    t, sx, y, h = box.thickness, box.sx, box.y, box.h
+    x = sum(sx) + t * (len(sx) - 1)
+    a, f = math.radians(box.angle), box.front
+    w = h * f * math.tan(a)
+    walls = {  # wall: (its placement, its strip's: corner, along, side, length)
+        "bottom": (Placement((0, y, 0), X, (0, -1, 0), 1), None),
+        "slope": (Placement((0, 0, 0), X, (0, -math.sin(a), math.cos(a)), 1), None),
+        "label": (Placement((0, -w, f * h), X, Z, 1), None),
+        "back": (Placement((0, y, 0), X, Z, -1), None),
+        "left side": (Placement((0, 0, 0), Y, Z, -1), ((0, 0, 0), Y, 1, y)),
+        "right side": (Placement((x, 0, 0), Y, Z, 1), ((x, 0, 0), Y, -1, y)),
+    }
+    dividers = [Placement((sum(sx[:i + 1]) + i * t, 0, 0), Y, Z, 1) for i in range(len(sx) - 1)]
+    out, strip = [], None
+    for p in parts:
+        label = p.record.label
+        if label in walls:
+            place, strip = walls[label]
+            out.append((p, place))
+        elif label == "dividers":
+            out.append((p, dividers.pop(0)))
+        elif label is None and strip:
+            corner, along, side, length = strip
+            out.append((p, Placement(_add(corner, along, (length - p.record.args[0]) / 2), along, Z, side)))
+    return out
+
+
+@recipe
+def WallHopper(box, parts):
+    """The sides (polygons: the wall at u = 0, the back on it up to u = t, v up from their bottom
+    line; their h edges hold the panels 2t in) and dividers (the same frame, v from the bottom's
+    top face), the back between them, the bottom from it (its top face 2t up) to the dispenser's
+    flat front, the slope rising from there at the angle, the label standing on it, and the
+    hopper's front panel, hd in front of the back, up to the top. render() works out the
+    dispenser's sizes; this does it again."""
+    t, sx, h, hd, dd, dh = box.thickness, box.sx, box.h, box.hopper_depth, box.dispenser_depth, box.dispenser_height
+    x = sum(sx) + t * (len(sx) - 1)
+    sr = min(box.slope_ratio, 0.999)
+    lr = min(box.label_ratio, 0.999) if box.label else 0
+    a = max(0, min(box.slope_angle, math.degrees(math.atan(dd / (dh * sr)))))
+    if sr + lr >= 1:
+        sr, lr = sr / (sr + lr) * 0.95, lr / (sr + lr) * 0.95
+    a = math.radians(a)
+    df = dd - dh * sr * math.tan(a)
+    sl = dh * sr / math.cos(a)
+    side = lambda u, v: (0, t - u, v)          # the sides' frame
+    foot = (t + hd + df, 2 * t)                # the slope's inner foot, on the bottom's front
+    top = (foot[0] + sl * math.sin(a), foot[1] + sl * math.cos(a))
+    out = [Placement(side(t, 2 * t), X, (0, -1, 0), 1),
+           Placement(side(*foot), X, (0, -math.sin(a), math.cos(a)), 1)]
+    if box.label:
+        out.append(Placement(side(*top), X, Z, 1))
+    out += [Placement(side(t, 2 * t), X, Z, -1), Placement(side(hd + t, dh + 2 * t), X, Z, 1),
+            Placement(side(0, 0), (0, -1, 0), Z, 1), Placement(_add(side(0, 0), X, x), (0, -1, 0), Z, -1)]
+    pos = 0
+    for s in sx[:-1]:
+        pos += s
+        out.append(Placement(_add(side(0, 2 * t), X, pos), (0, -1, 0), Z, -1))
+        pos += t
+    return out
+
+
+@recipe
+def RollHolder(box, parts):
+    """The back plate on the wall (u = X, v up; its callback's frame r in from its corner), the two
+    arms standing out of it (drawn with u up, v out, the plate's face at v = t), w apart, and
+    outside each arm a brace lying flat under the axle (see _right_triangles): one leg along the
+    plate, one along the arm. Two plates instead of one: the second turned to the right (drawn
+    mirrored). The rings (no part of their own) are left out."""
+    t, w, d, a, h = box.thickness, box.width, box.diameter, box.axle, box.height
+    x0, x1 = h / 4 + t / 2 - 3 * t, h / 4 + t / 2 + t - 3 * t + w     # the arms' mid-planes
+    zm = h - 3 * t - a / 2                                            # the braces'
+    out = (0, -1, 0)
+    sides, braces, plates = parts[:2], parts[2], parts[3:]
+    items = [(sides[0], Placement((x0 - t / 2, t, 0), Z, out, 1)), (sides[1], Placement((x1 - t / 2, t, 0), Z, out, 1))]
+    corners = [Placement((x0 - t / 2, 0, zm + t / 2), X, out, 1), Placement((x1 + t / 2, 0, zm - t / 2), (-1, 0, 0), out, 1)]
+    for (frame, kept), q in zip(_right_triangles(braces, h / 4, t), corners):
+        q.keep = kept
+        items.append((braces, q, frame))
+    if len(plates) == 1:
+        items.append((plates[0], Placement((0, 0, 0), X, Z, -1)))
+    else:
+        items += [(plates[0], Placement((0, 0, 0), X, Z, -1)),
+                  (plates[1], Placement((x0 + x1, 0, 0), (-1, 0, 0), Z, 1))]
+    return items
+
+
+RECIPES["WallRollHolder"] = RollHolder   # the same, the arms' joints to the plate for the wall system
+
+
+def _drill_stand(box, parts, left_foot, feet=0.0):
+    """DrillStand and WallDrillBox, in the frame they are drawn in: the tops level, the bottom
+    falling to the right by extra_height (the floor's top face from Z = eh at X = 0 to 0 at x), the
+    front and back walls (drawn from the front, their bottom slanted: u = X + their left edge's
+    spacing, v = Z + 2t), the inner x walls (u = X + t, v = Z + t), the bottom along the floor from
+    t·tan a right of X = 0, the y walls upright from the floor to the top (u = Y + t), and the sides (u = Y + t, their joints from 2t above
+    their foot: left_foot below the floor's left end, 2t below its right end, and their stackable
+    feet's height (feet) below that)."""
+    t, sx, sy, sh, eh = box.thickness, box.sx, box.sy, box.sh, box.extra_height
+    x, y = box.x, box.y
+    a = math.atan(eh / x)
+    d = (math.cos(a), 0, -math.sin(a))     # along the floor
+    floor = (0, 0, eh)                                                     # its top face at X = 0
+    front, *rest = parts
+    xwalls, back, bottom, left = rest[:len(sy) - 1], *rest[len(sy) - 1:len(sy) + 2]
+    ywalls, right = rest[len(sy) + 2:len(sy) + 1 + len(sx)], rest[-1]
+    out = [(front, Placement((-t, 0, -2 * t), X, Z, 1))]
+    pos = 0
+    for p, s in zip(xwalls, sy):
+        pos += s
+        out.append((p, Placement((-t, pos, -t), X, Z, -1)))
+        pos += t
+    out += [(back, Placement((-t, y, -2 * t), X, Z, -1)),
+            (bottom, Placement(_add(floor, d, t * math.tan(a)), d, Y, -1)),
+            (left, Placement((0, -t, eh - left_foot - feet), Y, Z, -1))]
+    pos = 0
+    for p, s in zip(ywalls, sx):
+        pos += s
+        out.append((p, Placement((pos, -t, eh * (1 - (pos + t / 2) / x)), Y, Z, 1)))
+        pos += t
+    return out + [(right, Placement((x, -t, -2 * t - feet), Y, Z, 1))]
+
+
+@recipe
+def WallDrillBox(box, parts):
+    return _drill_stand(box, parts, 2 * box.thickness)
+
+
+@recipe
+def DrillStand(box, parts):
+    """See _drill_stand: the left side's foot reaches down extra_height more, so both stand level."""
+    return _drill_stand(box, parts, box.extra_height + 2 * box.thickness, box.edges["š"].startWidth())
+
+
+@recipe
+def KeyHolder(box, parts):
+    """The back plate on the wall and a hook standing out of it at each pair of holes (drawn from
+    the plate, u out of it, v up: the hook curls up at the bottom)."""
+    t, p, d = box.thickness, box.padding_left_right, box.hook_distance
+    out = [Placement((0, 0, 0), X, Z, -1)]
+    return out + [Placement((p + i * (d + t), 0, box.padding_bot), (0, -1, 0), Z, -1) for i in range(box.num_hooks)]
+
+
+@recipe
+def SkadisBoard(box, parts):
+    """The board on the wall. The washers have no place given and are left out."""
+    return [Placement((0, 0, 0), X, Z, -1)]
+
+
+@recipe
+def SkadisStand(box, parts):
+    """One foot (the generator draws one; the board needs two), its profile in the YZ plane: the
+    foot back along +Y, the board leaning on its hooked front. The plate for foot_front lies under
+    it, the foot's fingers in its middle."""
+    t, w = box.thickness, max(box.foot / 10, box.thickness)
+    stand = Placement((-t / 2, 0, 0), Y, Z, 1)
+    if not box.foot_front:
+        return [stand]
+    return [Placement((-w, -(box.foot_front - w), 0), Y, X, 1), stand]
+
+
+@recipe
+def DinRailBox(box, parts):
+    """Closed box on a DIN rail: the back at Y = 0..t, the rail 8 behind it, the sides (drawn from
+    the top down, v out from the back's front face; their rail edge reaches back over the rail),
+    bottom and top from the back, the lid in front (Y = -h) with a lip inside along each side. The
+    latch slides down behind the back through the guide strip, its hook under the rail."""
+    t, x, y, h, w, o = box.thickness, box.x, box.y, box.h, box.rail_width, box.rail_offset
+    out, down = (0, -1, 0), (0, 0, -1)
+    guide = (y - w) / 2 - t / 2 + o - 9            # the guide's mid-plane on the back
+    place = {
+        "Lid": Placement((0, -h, 0), X, Z, 1),
+        "Back": Placement((0, 0, 0), X, Z, -1),
+        "Left Side upsidedown": Placement((0, 0, y), down, out, 1),
+        "Right Side": Placement((x, 0, y), down, out, -1),
+        "Bottom": Placement((0, 0, 0), X, out, 1),
+        "Top": Placement((0, 0, y), X, out, -1),
+    }
+    lips = [Placement((1.05 * t, -h - t, 0.05 * t - 1), Z, Y, 1), Placement((x - 1.05 * t, -h - t, 0.05 * t - 1), Z, Y, -1)]
+    items = []
+    for p in parts:
+        label = p.record.label
+        if label in place:
+            items.append((p, place[label]))
+        elif p.record.primitive == "rectangularWall":   # the latch's guide, behind the back
+            items.append((p, Placement((0, t, guide - t / 2), X, Y, 1)))
+        elif lips:
+            items.append((p, lips.pop(0)))
+        else:                                          # the latch
+            items.append((p, Placement((x / 2 - t / 2, t, (y - w) / 2 + o), down, Y, 1)))
+    return items
 
 
 # ---------------------------------------------------------------- driver
