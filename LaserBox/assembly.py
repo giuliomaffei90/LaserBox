@@ -3685,6 +3685,355 @@ def DinRailBox(box, parts):
     return items
 
 
+# ---------------------------------------------------------------- parts and samples
+
+def _gear_phase(poly, teeth, ring=False):
+    """Local angle (degrees) of the middle of a tooth: the outline's tips for a gear, the toothed
+    hole's for a ring gear (its teeth point in). Teeth repeat every 360/teeth: averaged on that."""
+    outline = max(poly.interiors, key=lambda i: Polygon(i).area) if ring else poly.exterior
+    pts = list(outline.coords)[:-1]
+    rs = [math.hypot(*p) for p in pts]
+    lo, hi = min(rs), max(rs)
+    tips = [p for p, r in zip(pts, rs) if (r < lo + 0.15 * (hi - lo) if ring else r > hi - 0.15 * (hi - lo))]
+    sx = sum(math.cos(teeth * math.atan2(y, x)) for x, y in tips)
+    sy = sum(math.sin(teeth * math.atan2(y, x)) for x, y in tips)
+    return math.degrees(math.atan2(sy, sx)) / teeth
+
+
+def _mesh(phase_a, teeth_a, theta, phase_b, teeth_b, inside=False):
+    """The turn (degrees) for gear b, whose tooth middle is at phase_b, so it meshes with gear a
+    (a tooth middle at phase_a, as turned) when b's centre is at angle theta from a's: a tooth
+    of each in a gap of the other on the line of centres. inside: b in the ring gear a."""
+    frac_a = ((theta - phase_a) * teeth_a / 360) % 1
+    if inside:  # both seen from the same side of the contact
+        return theta - phase_b - ((frac_a + 0.5) % 1) * 360 / teeth_b
+    return theta + 180 - phase_b - ((0.5 - frac_a) % 1) * 360 / teeth_b
+
+
+def _turned_frame(part, degrees):
+    """The part's local frame turned by degrees about its origin (a gear's centre)."""
+    return Affine.rotation(degrees) * local_matrix(part.record)
+
+
+def _part_polys(part):
+    return polygons_of(loops_of(part, local_matrix(part.record)))
+
+
+def _knob(box, parts):
+    """The three discs stacked, the bolt's in the middle: the one with the hex hole for its head
+    on the plain one, the one with the D hole for its shank on top (upside down, the bolt up)."""
+    t = box.thickness
+    plain, nut, shank = parts[2], parts[1], parts[0]
+    return [(plain, Placement((0, 0, 0), X, Y, 1)), (nut, Placement((0, 0, t), X, Y, 1)),
+            (shank, Placement((0, 0, 2 * t), X, Y, 1))]
+
+
+@decoration("WavyKnob", "steel")
+@decoration("ConcaveKnob", "steel")
+def _knob_bolt(box):
+    """A hex bolt: its head in the hex hole, its shank through the D hole and 30 mm on."""
+    t, s = box.thickness, box.hexhead / 2 - 0.2
+    head = Polygon([(s / math.cos(math.pi / 6) * math.cos(math.radians(a)),
+                     s / math.cos(math.pi / 6) * math.sin(math.radians(a))) for a in range(0, 360, 60)])
+    return (_solid("steel", Placement((0, 0, t), X, Y, 1), head, t) +
+            _rod("steel", (0, 0, 0), Z, X, (0, 0), box.bolthole / 2 - 0.2, t, 3 * t + 30))
+
+
+RECIPES["ConcaveKnob"] = RECIPES["WavyKnob"] = _knob
+
+
+@recipe
+def LBeam(box, parts):
+    """The L in the YZ plane, h long along X: x lying, its far edge's counterpart (F) under y,
+    which stands on it, its fingers down in the notches."""
+    t = box.thickness
+    x, y = parts[0].record.args[0], parts[1].record.args[0]
+    return [Placement((0, 0, 0), Y, X, -1), Placement((0, x, t), Z, X, 1)]
+
+
+@recipe
+def ZBeam(box, parts):
+    """The Z (or U) in the YZ plane, h long along X: x lying, y standing on its far edge, z lying
+    on top of y towards +Y. Flanged U: z's far edge on a second web y + t long, down to the floor."""
+    t = box.thickness
+    x, y, z = (parts[i].record.args[0] for i in range(3))
+    out = [Placement((0, 0, 0), Y, X, -1), Placement((0, x, t), Z, X, 1), Placement((0, x + t, t + y), Y, X, -1)]
+    if len(parts) > 3:  # its finger joint (f) on its left edge: drawn from the top down
+        out.append(Placement((0, x + t + z, t + y), (0, 0, -1), X, -1))
+    return out
+
+
+@recipe
+def RectangularWall(box, parts):
+    """The wall standing, its front face at Y = 0."""
+    return [Placement((0, 0, 0), X, Z, -1)]
+
+
+RECIPES["TriangularWall"] = RectangularWall
+
+
+@recipe
+def LaserHoldfast(box, parts):
+    """Each holdfast standing on its shaft's end, the hook up, side by side 20 mm apart (drawn
+    with the shaft along u from the hook at u = 0)."""
+    length = box.hookheight + box.h
+    return [Placement((i * (box.x + 20), 0, length), (0, 0, -1), X, -1) for i in range(len(parts))]
+
+
+@recipe
+def Pulley(box, parts):
+    """The toothed layers stacked, the rim (the generator draws one) on top."""
+    t = box.thickness
+    layers = parts[1:] + parts[:1] if box.top else parts
+    return [(p, Placement((0, 0, i * t), X, Y, 1)) for i, p in enumerate(layers)]
+
+
+@decoration("Pulley", "steel")
+def _pulley_axle(box):
+    t = box.thickness
+    n = math.ceil(box.h / t) + (1 if box.top else 0)
+    return _rod("steel", (0, 0, 0), Z, X, (0, 0), box.axle / 2 - 0.1, -10, n * t + 10)
+
+
+@recipe
+def Gears(box, parts):
+    """The two gears lying meshed, the big one round the origin, the small one r1 + r2 along X.
+    The template with the two shaft holes at that distance is left out (no outline)."""
+    big, small = parts[0], parts[1]
+    r1 = box.gears.sizes(teeth=box.teeth1, dimension=box.modulus, angle=box.pressure_angle,
+                         profile_shift=box.profile_shift)[0]
+    r2 = box.gears.sizes(teeth=box.teeth2, dimension=box.modulus, angle=box.pressure_angle,
+                         profile_shift=box.profile_shift)[0]
+    pa = _gear_phase(_part_polys(big)[0], box.teeth2)
+    turn = _mesh(pa, box.teeth2, 0, _gear_phase(_part_polys(small)[0], box.teeth1), box.teeth1)
+    return [(big, Placement((0, 0, 0), X, Y, 1)),
+            (small, Placement((r1 + r2, 0, 0), X, Y, 1), _turned_frame(small, turn))]
+
+
+@recipe
+def GearBox(box, parts):
+    """The narrow box (x across, X; y long, Y; the bottom on the floor), the two shafts across it
+    at y1 and y2, h / 2 up, the gears on them in layers 1.1 t apart: in each a small gear on one
+    shaft drives a big one on the other, alternately, each big gear glued to the next layer's
+    small gear on its shaft."""
+    t = box.thickness
+    t1, t2 = sorted((box.teeth1, box.teeth2))
+    pitch1, size1, _ = box.gears.sizes(teeth=t1, dimension=box.modulus)
+    pitch2, size2, _ = box.gears.sizes(teeth=t2, dimension=box.modulus)
+    side, end, end2, side2, bottom = parts[:5]
+    x, y, h = end.record.args[0], side.record.args[0], side.record.args[1]
+    if box.stages == 1:
+        y1, y2 = y / 2 - (pitch1 + pitch2) + pitch1, y / 2 + (pitch1 + pitch2) - pitch2
+    else:
+        y1, y2 = y / 2 - (pitch1 + pitch2) / 2, y / 2 + (pitch1 + pitch2) / 2
+    out = [(side, Placement((0, 0, 0), Y, Z, -1)), (side2, Placement((x, 0, 0), Y, Z, 1)),
+           (end, Placement((0, 0, 0), X, Z, 1)), (end2, Placement((0, y, 0), X, Z, -1)),
+           (bottom, Placement((0, 0, 0), X, Y, -1))]
+    bigs, smalls = parts[5:5 + box.stages], parts[5 + box.stages:5 + 2 * box.stages]
+    for i, (big, small) in enumerate(zip(bigs, smalls)):
+        xi = (i + 0.05) * 1.1 * t
+        a, b = (small, big) if i % 2 == 0 else (big, small)  # on y1, on y2
+        ta, tb = (t1, t2) if i % 2 == 0 else (t2, t1)
+        turn = _mesh(_gear_phase(_part_polys(a)[0], ta), ta, 0, _gear_phase(_part_polys(b)[0], tb), tb)
+        out += [(a, Placement((xi, y1, h / 2), Y, Z, 1)), (b, Placement((xi, y2, h / 2), Y, Z, 1), _turned_frame(b, turn))]
+    return out
+
+
+@decoration("GearBox", "steel")
+def _gearbox_shafts(box):
+    """The two shafts, through both sides and 5 mm out."""
+    t = box.thickness
+    t1, t2 = sorted((box.teeth1, box.teeth2))
+    pitch1, size1, _ = box.gears.sizes(teeth=t1, dimension=box.modulus)
+    pitch2, size2, _ = box.gears.sizes(teeth=t2, dimension=box.modulus)
+    x, y, h = 1.1 * t * box.stages, (size1 + size2 if box.stages == 1 else 2 * size2), max(size1, size2) + t
+    if box.stages == 1:
+        ys = (y / 2 - (pitch1 + pitch2) + pitch1, y / 2 + (pitch1 + pitch2) - pitch2)
+    else:
+        ys = (y / 2 - (pitch1 + pitch2) / 2, y / 2 + (pitch1 + pitch2) / 2)
+    return [p for yc in ys for p in _rod("steel", (0, 0, 0), X, Y, (yc, h / 2), box.shaft / 2 - 0.2, -t - 5, x + t + 5)]
+
+
+def _planetary(box):
+    """(planet positions in degrees, sun-to-planet distance, ring teeth) as the generator works them out."""
+    ringteeth = box.sunteeth + 2 * box.planetteeth
+    pitch1 = box.gears.sizes(teeth=box.sunteeth, dimension=box.modulus)[0]
+    pitch2 = box.gears.sizes(teeth=box.planetteeth, dimension=box.modulus)[0]
+    planets = int(math.pi / (math.asin(float(box.planetteeth + 2) / (box.planetteeth + box.sunteeth))))
+    if box.maxplanets:
+        planets = min(box.maxplanets, planets)
+    ta = box.sunteeth + ringteeth
+    positions = ([round(i * ta / planets) * 360 / ta for i in range(planets)] if ta % planets
+                 else [i * 360 / planets for i in range(planets)])
+    return positions, pitch1 + pitch2, ringteeth
+
+
+@recipe
+def Planetary(box, parts):
+    """Lying, from the floor: the disc, the ring gear with the sun and the planets meshed inside it
+    (the planets where the carrier has their holes), the carrier on top (drawn from its corner,
+    its centre width / 2 in). With deltateeth the second ring and its planets go in a layer of
+    their own between ring and carrier, on the same positions."""
+    t = box.thickness
+    positions, r, ringteeth = _planetary(box)
+    disc, ring, carrier, sun = parts[:4]
+    rest = parts[4:]
+    delta = rest.pop(0) if box.deltateeth else None
+    planets = rest
+    width = 2 * r + 3 * (box.shaft + box.play)
+    ps = _gear_phase(_part_polys(sun)[0], box.sunteeth)
+    pp = _gear_phase(_part_polys(planets[0])[0], box.planetteeth) if planets else 0
+    out = [(disc, Placement((0, 0, 0), X, Y, 1)), (sun, Placement((0, 0, t), X, Y, 1))]
+    turns = [_mesh(ps, box.sunteeth, a, pp, box.planetteeth) for a in positions]
+    for i, planet in enumerate(planets):
+        k = i % len(positions)
+        z = t if i < len(positions) else 2 * t
+        a = math.radians(positions[k])
+        out.append((planet, Placement((r * math.cos(a), r * math.sin(a), z), X, Y, 1), _turned_frame(planet, turns[k])))
+    # the ring turned to mesh with the first planet: its teeth facing the planet's gaps
+    pr = _gear_phase(_part_polys(ring)[0], ringteeth, ring=True)
+    planet_phase = pp + turns[0]
+    frac_p = ((positions[0] - planet_phase) * box.planetteeth / 360) % 1
+    ring_turn = positions[0] - pr - ((frac_p - 0.5) % 1) * 360 / ringteeth
+    out.append((ring, Placement((0, 0, t), X, Y, 1), _turned_frame(ring, ring_turn)))
+    if delta is not None:
+        out.append((delta, Placement((0, 0, 2 * t), X, Y, 1)))
+    out.append((carrier, Placement((-width / 2, -width / 2, (3 if delta is not None else 2) * t), X, Y, 1)))
+    return out
+
+
+@decoration("Planetary", "steel")
+def _planetary_pins(box):
+    """The sun's shaft and a pin through each planet into the carrier."""
+    t = box.thickness
+    positions, r, _ = _planetary(box)
+    top = (4 if box.deltateeth else 3) * t
+    out = _rod("steel", (0, 0, 0), Z, X, (0, 0), box.shaft / 2 - 0.1, -10, top + 15)
+    for a in positions:
+        c = (r * math.cos(math.radians(a)), r * math.sin(math.radians(a)))
+        out += _rod("steel", (0, 0, 0), Z, X, c, box.shaft / 2 - 0.1, t, top + 2)
+    return out
+
+
+def _four_bar(a, b, c, ground, start=60):
+    """Crank angle (degrees, from start on) and the coupler-rocker joint of a four-bar linkage:
+    crank a at the origin, rocker c at (ground, 0), coupler b between; the joint above."""
+    for k in range(0, 360, 5):
+        th = math.radians(start + k)
+        bx, by = a * math.cos(th), a * math.sin(th)
+        dx, dy = ground - bx, -by
+        d = math.hypot(dx, dy)
+        if abs(b - c) < d < b + c:
+            m = (b * b - c * c + d * d) / (2 * d)
+            hgt = math.sqrt(max(b * b - m * m, 0))
+            px, py = bx + m * dx / d, by + m * dy / d
+            return (bx, by), (px - hgt * dy / d, py + hgt * dx / d)
+    return None
+
+
+@recipe
+def Linkage(box, parts):
+    """A four-bar linkage tried on the base plate: the crank (the l/4 link), the coupler (3/4 l)
+    and the rocker (l/2) pinned, hole to hole, between the two outer holes of the plate's middle
+    row; the crank and the rocker on a spacer disc each, the coupler over them. The other discs
+    and links are left out."""
+    t, w = box.thickness, box.width
+    discs, links = parts[:10], parts[10:27]
+    plate = parts[-1]
+    holed = links[:10]   # 200, 200, 150, 50, 150, 50, 100, 100, 66, 66
+    crank, coupler, rocker = holed[3], holed[2], holed[6]
+
+    def span(link):  # its last hole on the centre line, from the first one at 0: the rounded end is w / 2 on
+        return round((_part_polys(link)[0].bounds[2] - w / 2) / box.dist) * box.dist - box.dist
+
+    # the plate's middle row: holes on its centre line
+    plate_poly = _part_polys(plate)[0]
+    cy = (plate_poly.bounds[1] + plate_poly.bounds[3]) / 2
+    row = sorted(Polygon(i).centroid.x for i in plate_poly.interiors if abs(Polygon(i).centroid.y - cy) < 0.5)
+    out = [(plate, Placement((0, 0, 0), X, Y, 1))]
+    if len(row) < 2:
+        return out
+    ax, gx = row[0], row[-1] - row[0]
+    found = _four_bar(span(crank), span(coupler), span(rocker), gx)
+    if not found:
+        return out
+    (bx, by), (cx, cy2) = found
+    A, B, C, D = (ax, cy), (ax + bx, cy + by), (ax + cx, cy + cy2), (ax + gx, cy)
+
+    def link_at(link, p, q, z):
+        ux, uy = q[0] - p[0], q[1] - p[1]
+        n = math.hypot(ux, uy)
+        U, V = (ux / n, uy / n, 0), (-uy / n, ux / n, 0)
+        return link, Placement(_add((p[0], p[1], z), V, -w / 2), U, V, 1)
+
+    out += [link_at(crank, A, B, 2 * t), link_at(rocker, D, C, 2 * t), link_at(coupler, B, C, 3 * t),
+            (discs[0], Placement((A[0], A[1], t), X, Y, 1)), (discs[1], Placement((D[0], D[1], t), X, Y, 1))]
+    box._laserbox_pins = (A, B, C, D)
+    return out
+
+
+@decoration("Linkage", "steel")
+def _linkage_pins(box):
+    """A pin in each joint, through the plate, the spacers and the links."""
+    t = box.thickness
+    return [p for x, y in getattr(box, "_laserbox_pins", ())
+            for p in _rod("steel", (0, 0, 0), Z, X, (x, y), box.diameter * 0.45, 0, 4 * t + 2)]
+
+
+@recipe
+def NemaMount(box, parts):
+    """The bracket on its slotted plate (lying, Y back from the corner), the motor plate standing
+    at the front (Y -t..0), a triangle each side from the corner up and back; the motor inside,
+    its face on the plate, the shaft out of the front. The finger holes drawn last (for a plate
+    of one's own to fix the bracket to) are left out."""
+    plate, triangles, base = parts[0], parts[1], parts[2]
+    x = plate.record.args[0]
+    out = [(base, Placement((0, 0, 0), X, Y, -1)), (plate, Placement((0, 0, 0), X, Z, 1))]
+    # both triangles are drawn in one part, the second turned half round (the hypotenuses side by
+    # side): it is brought onto the first, whose place each then keeps
+    t = box.thickness
+    pieces = _part_polys(triangles)
+    first = min(pieces, key=lambda q: abs(q.bounds[0]) + abs(q.bounds[1] + t))  # from the origin, fingers below
+    second = next(q for q in pieces if q is not first)
+    c1, c2 = first.envelope.centroid, second.envelope.centroid
+    back = ~(Affine.translation(c1.x + c2.x, c1.y + c2.y) * Affine.rotation(180))
+    here = first.centroid
+    keep = lambda p: abs(p.centroid.x - here.x) < 1 and abs(p.centroid.y - here.y) < 1
+    for frame, (x0, side) in ((Affine.identity(), (0, 1)), (back, (x, -1))):
+        out.append((triangles, Placement((x0, x, 0), (0, -1, 0), Z, side, keep=keep), frame * local_matrix(triangles.record)))
+    return out
+
+
+@decoration("NemaMount", "grip-black")
+def _mount_motor(box):
+    t = box.thickness
+    w = box.nema_sizes.get(box.size, box.nema_sizes[8])[0]
+    return _stepper(box, t, 0, t)
+
+
+ROBOT_SEGMENT_GAP = 15
+
+
+@recipe
+def RobotArm(box, parts):
+    """Each segment a closed tube along X, end to end ROBOT_SEGMENT_GAP apart in the order drawn:
+    its two walls a wide (the servo's) lying, its two walls b wide standing, a cap at each end
+    (one of an Mm segment drawn b × a, turned). Neither the servos nor how the segments join."""
+    out, x0 = [], 0.0
+    for i in range(0, len(parts) - 5, 6):
+        w1, w2, w3, w4, c1, c2 = parts[i:i + 6]
+        a, b, l = w1.record.args[0], w3.record.args[0], w1.record.args[1]
+        out += [(w1, Placement((x0, 0, 0), Y, X, 1)), (w2, Placement((x0, 0, b), Y, X, -1)),
+                (w3, Placement((x0, 0, 0), Z, X, -1)), (w4, Placement((x0, a, 0), Z, X, 1))]
+        for cap, xc, first in ((c1, x0, True), (c2, x0 + l, False)):
+            if abs(cap.record.args[0] - a) < 1e-6:
+                out.append((cap, Placement((xc, 0, 0), Y, Z, -1 if first else 1)))
+            else:
+                out.append((cap, Placement((xc, 0, 0), Z, Y, 1 if first else -1)))
+        x0 += l + 2 * box.thickness + ROBOT_SEGMENT_GAP
+    return out
+
+
 # ---------------------------------------------------------------- what hangs on the wall
 
 # Where each wall-mounted box's wall is (Y), as its recipe places it: a pegboard is shown there.
@@ -4128,17 +4477,23 @@ def NemaPattern(box, parts):
 
 @decoration("NemaPattern", "grip-black")
 def nema_motor(box):
-    """The stepper behind the panel, as long as it is wide: black end caps round a steel stack, its
-    corners chamfered, the pilot in the flange hole, the shaft through it out of the front."""
+    """The stepper behind the panel (see _stepper)."""
+    return _stepper(box, 0, box.thickness, MARGIN)
+
+
+def _stepper(box, x0, y, z0):
+    """A NEMA box.size stepper behind a panel t thick, its face at Y = y, its square from (x0, z0)
+    in X, Z: as long as it is wide, black end caps round a steel stack, its corners chamfered, the
+    pilot in the flange hole, the shaft through it out of the front."""
     t = box.thickness
     w, flange, holes, screws = box.nema_sizes.get(box.size, box.nema_sizes[8])
     k = 0.12 * w
     body = Polygon([(k, 0), (w - k, 0), (w, k), (w, w - k), (w - k, w), (k, w), (0, w - k), (0, k)])
     out = []
     for y0, y1, kind in ((0, 0.25, "grip-black"), (0.25, 0.75, "steel"), (0.75, 1, "grip-black")):
-        out += _solid(kind, Placement((0, t + y0 * w, MARGIN), X, Z, -1), body, (y1 - y0) * w)
-    out += _solid("grip-black", Placement((0, t - 2, MARGIN), X, Z, -1), Point(w / 2, w / 2).buffer(flange / 2 - 0.3), 2)
-    return out + _rod("steel", (0, 0, 0), Y, X, (w / 2, -(MARGIN + w / 2)), max(1.5, 0.06 * w), -w / 2, t)
+        out += _solid(kind, Placement((x0, y + y0 * w, z0), X, Z, -1), body, (y1 - y0) * w)
+    out += _solid("grip-black", Placement((x0, y - 2, z0), X, Z, -1), Point(w / 2, w / 2).buffer(flange / 2 - 0.3), 2)
+    return out + _rod("steel", (0, 0, 0), Y, X, (x0 + w / 2, -(z0 + w / 2)), max(1.5, 0.06 * w), y - t - w / 2, y)
 
 
 @recipe

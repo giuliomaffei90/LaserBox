@@ -1,7 +1,7 @@
 # 3D: punti da rivedere
 
 Annotazioni raccolte mentre facevo le viste 3D (mensole e scaffali, modelli da parete, motivi di fori,
-pezzi di test), le decorazioni e l'esploso. Per ognuno: cosa ho fatto, perché è dubbio, cosa si può decidere.
+pezzi di test, pezzi e campioni), le decorazioni e l'esploso. Per ognuno: cosa ho fatto, perché è dubbio, cosa si può decidere.
 
 ## Pezzi lasciati fuori
 
@@ -18,6 +18,17 @@ pezzi di test), le decorazioni e l'esploso. Per ognuno: cosa ho fatto, perché �
   del disegno, che andava perso) ma non sono ancora posizionati: non compaiono. L'asse c'è come
   decorazione.
 - **FrontPanel**: i fori fuori da ogni `outline` non sono mostrati; senza `outline` il 3D è vuoto.
+- **Gears**: la dima coi due fori all'interasse (e il testo con le misure) non ha contorno: non c'è.
+- **NemaMount**: i fori per le dita disegnati per ultimi, da tagliare in una piastra propria su cui
+  fissare la staffa, non sono mostrati.
+- **Linkage**: è un kit; monto solo un quadrilatero articolato sulla base (manovella = asta l/4,
+  biella = 3/4 l, bilanciere = l/2, tra i fori estremi della fila centrale, posizione scelta da me),
+  con un distanziale sotto manovella e bilanciere. Gli altri 8 dischi e 14 aste non compaiono.
+- **RobotArm**: solo i tubi dei segmenti, in fila a 15 mm l'uno dall'altro: niente servo e niente
+  collegamento tra un segmento e l'altro.
+- **Planetary** con `deltateeth`: la seconda corona e i suoi satelliti stanno nello strato sopra,
+  sulle stesse posizioni, senza calcolarne l'ingranamento.
+- **Pulley**: il generatore disegna un solo bordo (`top`), che metto sopra; sotto non c'è.
 - **SkadisStand**: il generatore disegna un solo piede, il pannello ne vuole due: ne mostro uno.
 - **WineRack** `walls=minimal`: il generatore disegna più pareti di quante ne abbiano i fori (30
   contro 22 con i valori predefiniti); quelle in più non sono mostrate.
@@ -43,6 +54,11 @@ pezzi di test), le decorazioni e l'esploso. Per ognuno: cosa ho fatto, perché �
 - **FanHole**: i bracci della girandola restano aperti di 0,34 mm (diametro 80): li chiudo come fori.
   Con diametri piccoli (40 mm, 10 bracci) i bracci del generatore si incrociano e alcuni fori si
   fondono.
+- **RobotArm**: con i valori predefiniti il generatore non disegna nulla. Ho messo come predefiniti
+  dell'app due segmenti (Mm e Mu): cambia anche il disegno 2D.
+- **ZBeam**: z ha la stessa descrizione di y ("profondità interna"); è la seconda ala della Z.
+- **StackableBin / WallStackableBin**: le misure dipendono dalla distanza tra i pezzi; col nuovo
+  default di 2 mm l'altezza cala di 0,5 mm e la profondità cresce di 0,2. Il 3D segue il disegno.
 - **DisplayShelf** con angolo negativo: i divisori, perpendicolari al ripiano inclinato,
   sporgono dal retro di qualche mm. È la geometria del generatore.
 
@@ -78,6 +94,17 @@ pezzi di test), le decorazioni e l'esploso. Per ognuno: cosa ho fatto, perché �
   l'arco. FlexTest2 flette in due direzioni: piegarlo su un asse solo è una scelta (una cupola sarebbe
   più fedele). FillTest è piatto.
 
+- **ConcaveKnob / WavyKnob**: i tre dischi impilati sottosopra (quello liscio a terra, quello col
+  foro esagonale per la testa del bullone, quello col foro a D sopra), il bullone verso l'alto.
+- **LaserHoldfast**: in piedi sulla punta del gambo, il gancio in alto; nessun piano a nido d'ape.
+- **NemaMount**: appoggiata sulla piastra con le asole, la piastra del motore davanti e il motore
+  dentro, l'albero in avanti. La foto la mostra con la piastra del motore a terra.
+- **GearBox**: strati di ruote ricavati dal codice: in ognuno una ruota piccola su un albero muove
+  una grande sull'altro, alternandosi; ogni grande è incollata alla piccola dello strato dopo.
+- **Gears / GearBox / Planetary**: la fase dei denti è calcolata perché ingranino (la
+  sovrapposizione che resta è quella del kerf). Il portasatelliti copre quasi tutto il planetario.
+- **RectangularWall / TriangularWall**: in piedi, viste di fronte.
+
 ## Decorazioni
 
 - **WineRack**: la spalla della bottiglia è a gradini; nel render Blender si vedono gli anelli.
@@ -91,6 +118,8 @@ pezzi di test), le decorazioni e l'esploso. Per ognuno: cosa ho fatto, perché �
   pacco in acciaio, centraggio nel foro grande, albero che esce davanti.
 - Senza contenuto: FrontPanel (pulsanti, il motore NEMA del terzo pannello), HolePattern,
   SevenSegmentPattern (la striscia LED), i pezzi di test.
+- **Pezzi e campioni**: bullone delle manopole, alberi della GearBox, perni del planetario e del
+  quadrilatero, asse della puleggia, motore della NemaMount (lungo quanto largo, come in NemaPattern).
 - Colori dei nuovi materiali (bottiglie, barattoli, vinili, colori) da giudicare nell'app.
 
 ## Esploso
@@ -138,3 +167,4 @@ pezzi di test), le decorazioni e l'esploso. Per ognuno: cosa ho fatto, perché �
 
 - Modelli da parete e DrillStand: compilati, avviati e pushati; da provare nell'app.
 - Motivi di fori e pezzi di test (nuova categoria "Test", ultima): compilati e avviati; da provare nell'app.
+- Pezzi e campioni: non compilati; da provare nell'app.

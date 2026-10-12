@@ -46,6 +46,7 @@ SKIPPED = {"input", "output", "format", "help", "reference", "qr_code", "debug"}
 DEFAULTS = {
     "CardBox": {"y": 89, "h": 17, "sx": "63.5*2", "openingdirection": "right", "fingerhole": "custom",
                 "fingerhole_depth": 10},
+    "RobotArm": {"type1": "RobotArmMm", "type2": "RobotArmMu"},  # boxes.py's draws no segment
 }
 INFO_LINK = re.compile(r"\s*\[[^\]]*\]\([^)]*\)")  # the web form's "[🛈](url)" help links
 
