@@ -39,6 +39,22 @@ _ = TRANSLATIONS.gettext
 boxes.ArgumentParser = type("ThrowingArgumentParser", (argparse.ArgumentParser,), {
     "error": lambda self, message: (_ for _ in ()).throw(ValueError(message))})
 
+
+def _adjust_size(adjust):
+    """boxes.py's adjustSize (outside sizes to inside ones) takes off each edge's startWidth and
+    margin, and a stackable edge's margin has the spacing between parts in it (room on the sheet
+    for its stabilizer strip): the box would shrink as the parts are spread. Here without it."""
+    def adjustSize(self, *a, **kw):
+        spacing, self.spacing = self.spacing, 0.0
+        try:
+            return adjust(self, *a, **kw)
+        finally:
+            self.spacing = spacing
+    return adjustSize
+
+
+boxes.Boxes.adjustSize = _adjust_size(boxes.Boxes.adjustSize)
+
 GENERATORS = {cls.__name__: cls for cls in boxes.generators.getAllBoxGenerators().values() if cls.webinterface}
 # Not offered: the reference rectangle and its QR code are never drawn, debug is off (see configure).
 SKIPPED = {"input", "output", "format", "help", "reference", "qr_code", "debug"}
@@ -444,8 +460,10 @@ def _pieces(g):
     pathes = [p for part in g for p in part.pathes]
     cuts = []
     pieces = assembly.polygons_of(assembly.loops_of(SimpleNamespace(pathes=pathes), Affine.identity(), cuts), cuts)
+    black_cuts = []  # slits (a flex cut, a shoe's) are outline too: the piece's ring runs along them
     outer = unary_union([LineString(l + l[:1]) for l in assembly.loops_of(
-        SimpleNamespace(pathes=[p for p in pathes if assembly._is_black(p.params.get("rgb"))]), Affine.identity())])
+        SimpleNamespace(pathes=[p for p in pathes if assembly._is_black(p.params.get("rgb"))]), Affine.identity(),
+        black_cuts)] + [LineString(c) for c in black_cuts if len(c) > 1])
     return [q for q in pieces if q.exterior.distance(outer) < 0.3 and
             outer.distance(q.exterior.interpolate(0.5, normalized=True)) < 0.3]
 
@@ -613,6 +631,16 @@ if __name__ == "__main__":
         configure(box, {})
         box.open()
         assert abs(box.spacing - (2 + 2 * box.burn)) < 1e-9, box.spacing  # 2 mm apart
+
+        def piece_areas(spacing):
+            box = make("StackableBin")
+            configure(box, {"spacing": spacing})
+            assembly.start()
+            box.open()
+            box.render()
+            box.ctx.stroke()
+            return sorted(round(q.area) for g in part_groups(box.ctx._dwg.parts) for q in _pieces(g))
+        assert piece_areas("2") == piece_areas("7")  # the spacing moves pieces, never resizes them
         dxf = svg_to_dxf(svg)
         assert dxf.count("\nLINE\n") > 50 and dxf.endswith("EOF\n")
         try:

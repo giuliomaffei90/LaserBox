@@ -57,8 +57,6 @@ pezzi di test, pezzi e campioni), le decorazioni e l'esploso. Per ognuno: cosa h
 - **RobotArm**: con i valori predefiniti il generatore non disegna nulla. Ho messo come predefiniti
   dell'app due segmenti (Mm e Mu): cambia anche il disegno 2D.
 - **ZBeam**: z ha la stessa descrizione di y ("profondità interna"); è la seconda ala della Z.
-- **StackableBin / WallStackableBin**: le misure dipendono dalla distanza tra i pezzi; col nuovo
-  default di 2 mm l'altezza cala di 0,5 mm e la profondità cresce di 0,2. Il 3D segue il disegno.
 - **DisplayShelf** con angolo negativo: i divisori, perpendicolari al ripiano inclinato,
   sporgono dal retro di qualche mm. È la geometria del generatore.
 
@@ -138,6 +136,13 @@ pezzi di test, pezzi e campioni), le decorazioni e l'esploso. Per ognuno: cosa h
   esclusi apposta); gli altri restano identici con i valori predefiniti.
 - `Placement(plate=…)`: per i pezzi fatti di soli fori, i fori che stanno dentro la lastra vengono
   sottratti dalla lastra.
+- Misure esterne e distanza tra i pezzi: boxes.py, per passare dalle misure esterne a quelle
+  interne, toglieva anche il "margine" del bordo impilabile, che contiene la distanza tra i pezzi
+  sul foglio: allargando la distanza, gli impilabili (StackableBin, WallStackableBin, Crate con
+  bordo impilabile…) si rimpicciolivano. Corretto nel bridge (`adjustSize` senza la distanza): le
+  misure degli impilabili sono cambiate rispetto a prima di qualche decimo, ora sono quelle giuste.
+  Un controllo su tutti i generatori (distanza 2 e 7 mm, con e senza misure esterne) non trova
+  altri pezzi che cambino forma.
 
 - Tolleranza di chiusura dei contorni portata da 0,2 a 0,3 mm in `loops_of` (SkadisStand e il
   chiavistello DinRailBox restano aperti di 0,22 mm). Nessun altro modello cambia con i valori
