@@ -2778,6 +2778,292 @@ def FlexBox2(box, parts):
     return out
 
 
+# ---------------------------------------------------------------- shelves
+
+@recipe
+def BinTray(box, parts):
+    """A type tray standing upright, open at the front (Y = 0): the back (x × h, the mounting holes
+    at the top) at Y = y, the walls drawn from it (v = 0) to the front. The sides' front profile
+    puts sh[0] at the top: each compartment has a retainer leaning out at 45° from its floor's front
+    edge, its inner face along the sides' sloped edge."""
+    t, sx, sh, y = box.thickness, box.sx, box.sh, box.y
+    x = sum(sx) + t * (len(sx) - 1)
+    h = sum(sh) + t * (len(sh) - 1)
+    back, up = (0, -1, 0), (0, -1 / math.sqrt(2), 1 / math.sqrt(2))
+    floors = [sum(sh[i + 1:]) + t * (len(sh) - 1 - i) for i in range(len(sh))]   # sh[i]'s floor
+    place = {
+        "bottom": Placement((0, y, 0), X, back, 1),
+        "top": Placement((0, y, h), X, back, -1),
+        "left": Placement((0, y, 0), Z, back, -1),
+        "right": Placement((x, y, 0), Z, back, 1),
+        "back": Placement((0, y, 0), X, Z, -1),
+    }
+    for i in range(len(sx) - 1):
+        place[f"inner vertical {i + 1}"] = Placement((sum(sx[:i + 1]) + i * t, y, 0), Z, back, 1)
+    for i in range(len(sh) - 1):
+        place[f"inner horizontal {i + 1}"] = Placement((0, y, floors[i] - t), X, back, -1)
+    for i in range(len(sh)):
+        place[f"retainer {i + 1}"] = Placement((0, 0, floors[i]), X, up, 1)
+    return place
+
+
+@recipe
+def CardHolder(box, parts):
+    """Sides (u = Y from the open front, v = Z), the back at Y = y between them, the floor sloping
+    down to the back by the angle (its finger grooves at the front, its top face meeting the back
+    t up), and between the compartments the middle walls, drawn from (t, t) at the back up the floor
+    towards the front. h is the full height (render() adds the slope)."""
+    t, sx, y, h = box.thickness, box.sx, box.y, box.h
+    a = math.radians(box.angle)
+    x = sum(sx) + t * (len(sx) - 1)
+    down = (0, math.cos(a), -math.sin(a))   # along the floor, front to back
+    top = (0, math.sin(a), math.cos(a))     # its top face's normal
+    front = _add((0, y, t), down, -y)        # its top face at the front
+    out = [Placement((0, 0, 0), Y, Z, -1), Placement((x, 0, 0), Y, Z, 1),
+           Placement(front, X, down, -1), Placement((0, y, 0), X, Z, -1)]
+    pos = 0
+    for s in sx[:-1]:
+        pos += s
+        out.append(Placement((pos, y + t, 0), (0, -1, 0), Z, -1))
+        pos += t
+    return out
+
+
+@recipe
+def DiscRack(box, parts):
+    """Two square sides (u = Y from the front, v = Z) and between them an L leant back by the angle
+    round the discs' centre C: the lower board, its top face r·lower_factor under C, from the front
+    to the rear board, whose front face is r·rear_factor behind C; the rear board stands on the
+    lower one's top face (its h edge reaches below it)."""
+    t, o, r, w = box.thickness, box.outer, box.disc_diameter / 2, sum(box.sx)
+    a = math.radians(box.angle)
+    along, up = (0, math.cos(a), -math.sin(a)), (0, math.sin(a), math.cos(a))   # the L's frame
+    corner = _add(_add((0, o / 2, o / 2), along, r * box.rear_factor), up, -r * box.lower_factor)
+    return [Placement((0, 0, 0), Y, Z, -1), Placement((w, 0, 0), Y, Z, 1),
+            Placement(_add(corner, along, -box.lower_size), along, X, 1),
+            Placement(corner, up, X, 1)]
+
+
+@recipe
+def DisplayShelf(box, parts):
+    """Sides drawn from the back (u = 0 at Y = y; the front at Y = 0), their inner bottom at Z = 0:
+    sloped tops are polygons from the outer bottom, the bottom's h edge le under it. Each shelf, from
+    the sides' finger holes (its mid-plane, from the back, falling by the angle), is drawn from its
+    front lip back (v = 0 at the front); the lip stands on its top face, the dividers on it from the
+    back. Optional back, front and bottom walls close it."""
+    t, x, y, a, sl = box.thickness, box.x, box.y, box.radians, box.sl
+    le = box.edges["h"].startWidth() if box.include_bottom else 0
+    hs = (sl + t) * math.sin(a) + math.cos(a) * t
+    h = box.h - box.bottom_distance - box.top_distance
+    side = lambda u, v: (0, y - u, v)                    # the sides' frame in world
+    d = (0, -math.cos(a), -math.sin(a))                  # down the shelf, to the front
+    n = (0, -math.sin(a), math.cos(a))                   # its top face's normal
+    shelves, lips, dividers = [], [], {}
+    for i in range(box.num):
+        pv = hs - math.cos(a) * 0.5 * t + i * (h - abs(hs)) / (box.num - 0.5) + box.bottom_distance
+        if a < 0:
+            pv += -math.sin(a) * sl
+        back = _add(side(abs(0.5 * t * math.sin(a)), pv), n, t / 2)     # its top face at the back
+        front = _add(back, d, sl)
+        shelves.append(Placement(front, X, tuple(-c for c in d), -1))
+        lips.append(Placement(front, X, n, 1))
+        pos = 0
+        for j, s in enumerate(box.sx[:-1]):
+            pos += s
+            dividers[f"divider {j + 1} for shelf {i + 1}"] = Placement(_add(back, X, pos), d, n, -1)
+            pos += t
+    sides = [Placement(side(0, 0), (0, -1, 0), Z, 1), Placement(_add(side(0, 0), X, x), (0, -1, 0), Z, -1)]
+    out = [(p, q, ~(p.record.matrix * Affine.translation(0, le)) if box.slope_top else None)
+           for p, q in zip(parts[:2], sides)]
+    place = {"back wall": Placement((0, y, 0), X, Z, -1), "front wall": Placement((0, 0, 0), X, Z, 1),
+             "bottom wall": Placement((0, 0, 0), X, Y, -1), **dividers}
+    for p in parts[2:]:
+        label = p.record.label
+        if label.startswith("shelf"):
+            out.append((p, shelves.pop(0)))
+        elif label.startswith("front lip"):
+            out.append((p, lips.pop(0)))
+        else:
+            out.append((p, place[label]))
+    return out
+
+
+@recipe
+def SBCMicroRack(box, parts):
+    """Two sides (u from the top down, v = Y; the stackable feet at u = H) with the plain base plate
+    in the feet's finger holes and a shelf in each row of holes, counted from the top; the boards'
+    port holes are in the first side, put on the right. The switch holder (--switch) has no holes
+    to say where it goes and is left out."""
+    t, hp = box.thickness, box.clearance_z + box.thickness
+    H = box.sbcs * hp + hp / 2
+    L = box.y + 2 * box.hole_dist_edge
+    sides, rest = parts[:2], parts[3 if box.switch else 2:]
+    down = (0, 0, -1)
+    out = [(sides[0], Placement((L, 0, H), down, Y, 1)), (sides[1], Placement((0, 0, H), down, Y, -1)),
+           (rest[0], Placement((0, 0, 0), X, Y, -1))]
+    return out + [(p, Placement((0, 0, H - i * hp - hp / 2 - 1.5 + t / 2), X, Y, -1)) for i, p in enumerate(rest[1:])]
+
+
+@recipe
+def PaintStorage(box, parts):
+    """End walls at X = 0 and y (u from the top down, v = Y; the stackable feet at u = h hold the
+    bottom), the bottom, and the plates with the can holes where the end walls' finger holes are
+    (the generator's "additional bottom" is the one near the top), all x wide from Y = -t. The two
+    strips go inside the end walls under the bottom. As a drawer: front and back walls instead,
+    upside down (their bottom edge joins the bottom)."""
+    t, x, y, ch = box.thickness, box.x, box.y, box.canheight
+    s = box.edges["s"].settings
+    h = ch - s.height - s.holedistance + t
+    down = (0, 0, -1)
+    plate = lambda u: Placement((0, -t, h - u + t / 2), X, Y, -1)   # finger holes' mid-plane u from the top
+    out = [Placement((0, 0, h), down, Y, -1), Placement((y, 0, h), down, Y, 1),
+           Placement((0, -t, -t), down, Y, 1), Placement((y, -t, -t), down, Y, -1),
+           Placement((0, 0, 0), X, Y, -1)]
+    if box.drawer:
+        return out + [Placement((0, 0, h), X, down, -1), Placement((0, x - 2 * t, h), X, down, 1)]
+    out.append(plate(ch * 2 / 3 - 2 * t))
+    if box.additional_bottom:
+        out.append(plate(ch / 6 - t / 2))
+    if box.additional_top:
+        out.append(plate(ch - ch / 6 - t))
+    return out
+
+
+@recipe
+def SpicesRack(box, parts):
+    """The back hangs on the wall (front face at Y = D, the full depth of the shelves, so their
+    scalloped fronts reach Y = 0), the shelves out from it, a row every box.h, each on a support
+    between every two cans: from the back, its quarter round cut at the front bottom. Feet, when
+    asked for, take the bottom row's supports' places and reach the floor (the spare supports are
+    left out). Supports drawn in the shelves' holes are parts of their own."""
+    t, n, H = box.thickness, box.numx, box.h
+    D = box.hole_distance + box.hole_length + box.space / 2
+    drawn = [p for p in parts if p.record.primitive]
+    loose = [p for p in parts if not p.record.primitive]
+    feet = loose[len(loose) - (n - 1):] if box.feet else []
+    supports = loose[:len(loose) - len(feet)]
+    top = lambda i: (i + 1) * H - H / 2 + t / 2              # row i's shelf, its top face
+    bracket = lambda i, j: Placement((j * (box.diameter + box.space) - t / 2, D, top(i) - t - (H - t) / 2),
+                                     (0, -1, 0), Z, -1)
+    out = [(drawn[-1], Placement((0, D, 0), X, Z, -1))]
+    out += [(p, Placement((0, D, top(i)), X, (0, -1, 0), 1)) for i, p in enumerate(drawn[:-1])]
+    rows = range(1 if feet else 0, box.numy)
+    out += list(zip(supports, [bracket(i, j) for i in rows for j in range(1, n)]))
+    # a foot's f edge runs down the back from the bottom shelf (u), its body out from v = t
+    return out + [(p, Placement(_add(bracket(0, j).origin, Z, (H - t) / 2), (0, 0, -1), (0, -1, 0), -1),
+                   ~(p.record.start * Affine.translation(0, t))) for j, p in enumerate(feet, 1)]
+
+
+@recipe
+def StackableBin(box, parts):
+    """One compartment row of BinTray standing on stackable feet: sides (u = Y from the open front,
+    v = Z), the back at Y = d, the bottom drawn from the back, the retainer leaning out at 45° from
+    its front edge, dividers between the compartments. The stackable edges' stabilizer strips are
+    glued inside their walls on the bottom, as in Crate; the optional label strip is left out."""
+    t, sx, d, h = box.thickness, box.sx, box.d, box.h
+    x = sum(sx) + t * (len(sx) - 1)
+    walls = {  # wall: (its placement, its strip's: corner, along, side, length)
+        "bottom": (Placement((0, d, 0), X, (0, -1, 0), 1), None),
+        "back": (Placement((0, d, 0), X, Z, -1), ((0, d, 0), X, 1, x)),
+        "retainer": (Placement((0, 0, 0), X, (0, -1 / math.sqrt(2), 1 / math.sqrt(2)), 1), None),
+        "left": (Placement((0, 0, 0), Y, Z, -1), ((0, 0, 0), Y, 1, d)),
+        "right": (Placement((x, 0, 0), Y, Z, 1), ((x, 0, 0), Y, -1, d)),
+    }
+    dividers = [Placement((sum(sx[:i + 1]) + i * t, 0, 0), Y, Z, 1) for i in range(len(sx) - 1)]
+    out, strip = [], None
+    for p in parts:
+        label = p.record.label
+        if label in walls:
+            place, strip = walls[label]
+            out.append((p, place))
+        elif label == "divider":
+            out.append((p, dividers.pop(0)))
+        elif label is None and strip:
+            corner, along, side, length = strip
+            out.append((p, Placement(_add(corner, along, (length - p.record.args[0]) / 2), along, Z, side)))
+    return out
+
+
+@recipe
+def StorageRack(box, parts):
+    """Open at the front (Y = 0): the sides (the second drawn from the back), the back at Y = d, and
+    at each level between the compartments sh a pair of rails along the sides (the second from the
+    back). The two full floors close the bottom and the top; with an e edge there, the floor is
+    the first (last) level's instead, across the back. A plain stackable top (S) holds no floor."""
+    t, sh, x, d, b, e = box.thickness, box.sh, box.x, box.depth, box.bottom_edge, box.top_edge
+    h = sum(sh) + t * (len(sh) - 1)
+    levels = [sum(sh[:i + 1]) + (i + 1) * t for i in range(len(sh) - 1)]   # the top faces
+    floors = [Placement((0, 0, levels.pop(0) if b == "e" else 0), Y, X, 1),
+              Placement((0, 0, levels.pop() if e == "e" else h), Y, X, 1 if e == "e" else -1)]
+    if e == "S":
+        floors.pop()
+    rails = [q for z in levels for q in (Placement((0, 0, z), Y, X, 1), Placement((x, d, z), (0, -1, 0), (-1, 0, 0), 1))]
+    out = list(zip(parts[:2], [Placement((0, 0, 0), Y, Z, -1), Placement((x, d, 0), (0, -1, 0), Z, -1)]))
+    out += list(zip(parts[2:4], floors)) + list(zip(parts[4:-1], rails))
+    return out + [(parts[-1], Placement((0, d, 0), X, Z, -1))]
+
+
+@recipe
+def StorageShelf(box, parts):
+    """Open at the front (Y = 0), x deep, the compartments sy across (X) and sh up: the sides (the
+    right one drawn from the back), the back at Y = x, the floor, top and inner horizontals drawn
+    from the front (the horizontals' slots, sy reversed, are at their v = 0 at X = W), the inner
+    verticals from the back, and the retainers standing on each level's front edge. A lid style's
+    tops lie on the walls, their u along the depth (as drawLid draws them, x × y); the v edge's
+    hinge parts are left out."""
+    t, sy, sh, x = box.thickness, box.sy, box.sh, box.x
+    W = sum(sy) + t * (len(sy) - 1)
+    h = sum(sh) + t * (len(sh) - 1)
+    levels = [sum(sh[:i]) + i * t for i in range(len(sh))]   # top faces: the floor, then the horizontals
+    back = (0, -1, 0)
+    place = {
+        "left": Placement((0, 0, 0), Y, Z, -1),
+        "right": Placement((W, x, 0), back, Z, -1),
+        "bottom": Placement((0, 0, 0), Y, X, 1),
+        "top": Placement((0, 0, h), Y, X, -1, lid=box.top_edge == "c"),
+        "back": Placement((0, x, 0), X, Z, -1),
+    }
+    for i in range(1, len(sh)):
+        place[f"inner horizontal {i}"] = Placement((W, 0, levels[i] - t), Y, (-1, 0, 0), 1)
+    for i in range(len(sy) - 1):
+        place[f"inner vertical {i + 1}"] = Placement((sum(sy[:i + 1]) + i * t, x, 0), back, Z, -1)
+    for i, z in enumerate(levels):
+        place[f"retainer {i + 1}"] = Placement((0, 0, z), X, Z, 1)
+    at = lambda z: Placement((0, 0, z), Y, X, -1, lid=True)
+    lids = {"E": [at(h + t), at(h)], "i": [at(h)], "L": [at(h)], "k": [at(h), Placement((0, x, h), back, X, 1, lid=True)],
+            "v": [Placement((W, x, h), back, (-1, 0, 0), -1, lid=True)]}.get(box.top_edge, [])
+    labels = [p.record.label for p in parts]
+    first = max(i for i, l in enumerate(labels) if l in ("left", "right", "bottom") or (l or "").startswith("inner horizontal")) + 1
+    out = [(p, place[p.record.label]) for p in parts if p.record.label in place]
+    return out + list(zip(parts[first:labels.index("back")], lids))
+
+
+@recipe
+def WineRack(box, parts):
+    """Standing on its edge, the bottles going in along Y: the panel with the bottle holes and the
+    finger holes (u, v = X, Z) at Y = 0, the back (finger holes only) at Y = h, the front cover
+    (bottle holes only) on the panel, and between the panel and the back a wall in every pair of
+    the honeycomb's finger holes, h deep. Where those are comes from replaying the panel's
+    callback with its drawing calls recorded."""
+    t, h = box.thickness, box.h
+    at, walls = [], []
+    box.moveTo = lambda x, y, *a: at.append((x, y))
+    box.hole = lambda *a, **kw: None
+    box.hexFingerHoles = lambda x, y, l, angle=90: walls.append((x, y, math.radians(angle)))
+    try:
+        box.wallCB()
+    finally:
+        del box.moveTo, box.hole, box.hexFingerHoles
+    ox, oy = at[0]
+    out = [Placement((0, 0, 0), X, Z, 1), Placement((0, h, 0), X, Z, -1), Placement((0, -t, 0), X, Z, 1)]
+    for x, y, a in walls:
+        U = (math.cos(a), 0, math.sin(a))
+        N = (-math.sin(a), 0, math.cos(a))   # U × Y
+        mid = (ox + x + box.delta * U[0], 0, oy + y + box.delta * U[2])
+        out.append(Placement(_add(mid, N, -t / 2), U, Y, 1))
+    return out
+
+
 # ---------------------------------------------------------------- driver
 
 def assemble(box):
