@@ -137,4 +137,4 @@ pezzi di test), le decorazioni e l'esploso. Per ognuno: cosa ho fatto, perch√© √
 ## Ancora da fare
 
 - Modelli da parete e DrillStand: compilati, avviati e pushati; da provare nell'app.
-- Motivi di fori e pezzi di test (nuova categoria "Test", ultima): non compilati; da provare nell'app.
+- Motivi di fori e pezzi di test (nuova categoria "Test", ultima): compilati e avviati; da provare nell'app.
