@@ -324,7 +324,9 @@ struct HTMLView: NSViewRepresentable {
     }
 }
 
-/// Shows the SVG on white "paper". Updates replace the drawing in place, so zoom (pinch) and scroll survive.
+/// Shows the SVG as a blueprint: white lines and lettering on blue paper with a 10 mm grid. Only the look
+/// on screen: the exported files keep boxes.py's colours. Updates replace the drawing in place, so zoom
+/// (pinch) and scroll survive.
 struct SVGPreview: NSViewRepresentable {
     let svg: String
 
@@ -337,8 +339,28 @@ struct SVGPreview: NSViewRepresentable {
             html, body { margin: 0; height: 100%; background: #e9e9ec; }
             @media (prefers-color-scheme: dark) { html, body { background: #2a2a2d; } }
             #paper { box-sizing: border-box; height: 100%; padding: 24px; display: flex; }
-            svg { flex: 1; width: 100%; height: 100%; background: white; box-shadow: 0 1px 4px rgba(0,0,0,.25); }
-            </style></head><body><div id="paper"></div></body></html>
+            svg { flex: 1; width: 100%; height: 100%; box-shadow: 0 1px 6px rgba(0,0,0,.35);
+                  background: radial-gradient(ellipse at 30% 20%, #2662ad, #1a4b8c 60%, #143d75); }
+            svg > g path { stroke: #fff; stroke-width: 1.1px; vector-effect: non-scaling-stroke; }
+            svg > g path[stroke="rgb(0,255,0)"], svg > g path[stroke="rgb(0,255,255)"] { stroke: rgba(255,255,255,.7); }
+            svg > g path[stroke="rgb(255,0,0)"] { stroke: rgba(255,255,255,.45); stroke-width: .8px; }
+            svg text { fill: #fff !important; font-family: "DIN Alternate", "Avenir Next Condensed", sans-serif !important;
+                       letter-spacing: .04em; }
+            svg text[style*="255,0,0"] { fill: rgba(255,255,255,.6) !important; }
+            </style><script>
+            const grid = `<defs>
+              <pattern id="bp-minor" width="10" height="10" patternUnits="userSpaceOnUse">
+                <path d="M10 0H0V10" fill="none" stroke="rgba(255,255,255,.10)" stroke-width=".25"/></pattern>
+              <pattern id="bp-major" width="50" height="50" patternUnits="userSpaceOnUse">
+                <rect width="50" height="50" fill="url(#bp-minor)"/>
+                <path d="M50 0H0V50" fill="none" stroke="rgba(255,255,255,.22)" stroke-width=".4"/></pattern>
+              </defs><rect x="-10000" y="-10000" width="20000" height="20000" fill="url(#bp-major)"/>`;
+            function show(svg) {
+              const paper = document.getElementById('paper');
+              paper.innerHTML = svg;
+              paper.querySelector('svg')?.insertAdjacentHTML('afterbegin', grid);
+            }
+            </script></head><body><div id="paper"></div></body></html>
             """, baseURL: nil)
         return view
     }
@@ -356,7 +378,7 @@ struct SVGPreview: NSViewRepresentable {
         func show(_ svg: String, in view: WKWebView) {
             pending = svg
             guard loaded else { return }
-            view.callAsyncJavaScript("document.getElementById('paper').innerHTML = svg", arguments: ["svg": svg], in: nil, in: .page)
+            view.callAsyncJavaScript("show(svg)", arguments: ["svg": svg], in: nil, in: .page)
         }
 
         func webView(_ view: WKWebView, didFinish navigation: WKNavigation!) {

@@ -4229,7 +4229,6 @@ def assemble(box):
     """Runs the generator with the recording hooks and returns the placed pieces."""
     install()
     RECORDS.update(all=[], current=None, pending={}, walls=None, stack=[], border=None)
-    box.reference = 0  # the reference rectangle (bottom left of the sheet) is never part of the box
     box.open()
     box.render()
     box.ctx.stroke()  # the last path drawn (a fan's swirl) is stroked only by close()

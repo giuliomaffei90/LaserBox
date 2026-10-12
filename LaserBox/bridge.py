@@ -33,7 +33,8 @@ boxes.ArgumentParser = type("ThrowingArgumentParser", (argparse.ArgumentParser,)
     "error": lambda self, message: (_ for _ in ()).throw(ValueError(message))})
 
 GENERATORS = {cls.__name__: cls for cls in boxes.generators.getAllBoxGenerators().values() if cls.webinterface}
-SKIPPED = {"input", "output", "format", "help"}
+# Not offered: the reference rectangle and its QR code are never drawn (see configure).
+SKIPPED = {"input", "output", "format", "help", "reference", "qr_code"}
 # The app's own defaults where they differ from boxes.py's (the app sends only the values changed).
 DEFAULTS = {
     "CardBox": {"y": 89, "h": 17, "sx": "63.5*2", "openingdirection": "right", "fingerhole": "custom",
@@ -115,6 +116,7 @@ def generator_args(name):
 def configure(box, args):
     """The generator's arguments, and what the web form would add."""
     box.parseArgs([f"--{k}={v}" for k, v in args.items()])
+    box.reference, box.qr_code = 0, False
     if isinstance(box, boxes.generators.traylayout.TrayLayout) and not hasattr(box, "generate_layout"):
         # An empty layout means "every compartment from sx and sy", like the web form's first step
         # (GridfinityTrayLayout makes its own).
@@ -223,6 +225,7 @@ if __name__ == "__main__":
         assert any(a["name"] == "x" for g in spec["groups"] for a in g["args"])
         svg = render("UniversalBox", {"x": "120"}, "svg")
         assert svg.startswith("<?xml") and "<path" in svg
+        assert "burn:" not in render("UniversalBox", {"reference": "100", "qr_code": "1"}, "svg")  # no reference
         dxf = svg_to_dxf(svg)
         assert dxf.count("\nLINE\n") > 50 and dxf.endswith("EOF\n")
         try:
