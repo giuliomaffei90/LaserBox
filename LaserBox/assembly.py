@@ -1727,6 +1727,398 @@ def UniversalBox(box, parts):
     return out + list(zip(others, tops)) + _lid(box, others[len(tops):], x, y, h)
 
 
+def _flex_walls(walls, t, origin=(0, 0), rot=0.0):
+    """polygonWalls' walls (one drawn part, see install) round its borders, which start at origin
+    heading rot° in the world's XY: one Placement per wall, from its first bottom edge — after a
+    concave corner t·tan(-angle/2) past the corner, as the generator shortens it — its arcs bent
+    with their radius (flex), with its local frame. Assumes left-turning arcs."""
+    rec = RECORDS["walls"]
+    borders, starts = rec["borders"], rec["starts"]
+    d = lambda hd: (math.cos(math.radians(hd + rot)), math.sin(math.radians(hd + rot)))
+    pos, heading, corr, k, i, out = (0.0, 0.0), 0.0, 0.0, 0, 0, []
+    step = lambda p, hd, l: (p[0] + l * d(hd)[0], p[1] + l * d(hd)[1])
+    while i < len(borders):
+        start, h0, u, bends = step(pos, heading, corr), heading, -corr, []
+        while True:
+            pos = step(pos, heading, borders[i])
+            u += borders[i]
+            angle = borders[i + 1]
+            if not isinstance(angle, (tuple, list)):
+                break
+            a, r = angle
+            bends.append((u, u + math.radians(a) * r, a, r))
+            pos = step(step(pos, heading + 90, r), heading + a - 90, r)   # round the arc's centre
+            heading += a
+            u += math.radians(a) * r
+            i += 2
+        heading += angle
+        corr = t * math.tan(math.radians(-angle / 2)) if angle < 0 else 0.0
+        i += 2
+        end = u - corr
+        out.append((walls, Placement((origin[0] + start[0], origin[1] + start[1], 0), (*d(h0), 0), Z, 1, bends,
+                                     keep=lambda q, end=end: 0 < q.centroid.x < end), ~starts[k][0]))
+        k += len(bends) + 1   # a bottom edge before each arc and one after the last
+    return out
+
+
+@recipe
+def FlexBox5(box, parts):
+    """Two sides (X, Z: their bottom edge's start, the bottom tangent of the r2 circle, at X = r2,
+    Z = 0; the first at Y = 0, the second, drawn mirrored, at Y = h) and the wall wrapped round them:
+    it starts on the top edge just past the latch and goes round the way the sides are drawn, v
+    from the second side's inner face, bent round the r2 and the r1 circle at its flex cuts."""
+    t, h = box.thickness, box.h            # render() adjusted them, and the latch size, already
+    r1, r2 = box.top_diameter / 2, box.bottom_diameter / 2
+    a, l = box.a, box.l
+    wall = next(p for p in parts if p.record.primitive == "surroundingWall")
+    sides = [p for p in parts if p.record.primitive == "flexBoxSide"]
+    # the wall's start: along the bottom (l), round the r1 circle, past the latch
+    hd = math.radians(180 + 2 * a)
+    px = l + r1 * math.sin(hd) + box.latchsize * math.cos(hd)
+    pz = r1 - r1 * math.cos(hd) + box.latchsize * math.sin(hd)
+    local = ~(wall.record.start * Affine.translation(0, 1.25 * t))   # moveTo(0, 0.25 t), F edge t in
+    bends = [((local * (m * (0, 0)))[0], (local * (m * (0, 0)))[0] + length, math.degrees(length / r), r)
+             for (m, length), r in zip(wall.record.flex, (r2, r1))]
+    return [(sides[0], Placement((r2, 0, 0), X, Z, 1)), (sides[1], Placement((r2, h, 0), X, Z, -1)),
+            (wall, Placement((r2 + px, h, pz), (math.cos(hd), 0, math.sin(hd)), (0, -1, 0), 1, bends), local)]
+
+
+@recipe
+def RoundedRegularBox(box, parts):
+    """A regular n-gon round the Z axis, inner circle inner_size, its corners rounded with radius:
+    the plates' outline starts at the middle of the front side, -inner_size/2 in Y (the bottom at
+    Z = 0, the top at h); the walls polygonWalls drew round it (see _flex_walls), each bent round
+    the corners it spans. top lid: a plate t larger all round on the top, its first side's start
+    t out from the front side's."""
+    t, ap = box.thickness, box.inner_size / 2
+    bottom, top = parts[:2]
+    out = [(bottom, Placement((0, -ap, 0), X, Y, -1)), (top, Placement((0, -ap, box.h), X, Y, 1))]
+    if box.top == "lid":
+        out.append((parts[2], Placement((-box.side / 2, -ap - t, box.h + t), X, Y, 1, lid=True)))
+    return out + _flex_walls(parts[-1], t, (0, -ap))
+
+
+@recipe
+def HeartBox(box, parts):
+    """The heart's outline (polygonWalls' borders) from its tip, turned 45° so the tip is at the
+    front (X = 0, Y = 0) and the lobes at the back: the walls round it (see _flex_walls), bent round
+    the lobes, the top (drawn first, with the hole) at h and the bottom (drawn mirrored). top lid:
+    the cut-out of the top's hole is cut again t smaller: its ring, glued under the lid (t larger
+    all round, its start t out from the tip both ways), sits in the hole; the rest is scrap."""
+    t, h = box.thickness, box.h
+    U, V = (math.sqrt(0.5), math.sqrt(0.5), 0), (-math.sqrt(0.5), math.sqrt(0.5), 0)
+    walls, top, bottom = parts[:3]
+    lid = box.top == "lid"
+    out = [(top, Placement((0, 0, h), U, V, 1, keep=(lambda q: bool(q.interiors)) if lid else None)),
+           (bottom, Placement((0, 0, 0), U, V, -1))]
+    if lid:
+        local = local_matrix(top.record)
+        hole, cut = sorted(loops_of(top, local), key=lambda l: -abs(Polygon(l).area))[1:3]
+        ring = SimpleNamespace(record=top.record, pathes=[
+            SimpleNamespace(path=[("M", *l[0])] + [("L", *q) for q in l[1:] + l[:1]], params={}) for l in (hole, cut)])
+        out += [(ring, Placement((0, 0, h), U, V, 1, lid=True), Affine.identity()),
+                (parts[3], Placement((0, -t * math.sqrt(2), h + t), U, V, 1, lid=True))]
+    return out + _flex_walls(walls, t, rot=45)
+
+
+def _flex_bends(rec, local, r, y):
+    """A surrounding wall's bends, one per flex cut, about the sides' corners of radius r. A flex
+    running round both corners at once (y - 2r < t) turns 180° over the side's full depth y."""
+    out = []
+    for m, length in rec.flex:
+        u0 = (local * (m * (0, 0)))[0]
+        both = length > 1.01 * math.pi * r / 2
+        out.append((u0, u0 + length, 180 if both else 90, y / 2 if both else r))
+    return out
+
+
+def _clip(place, u0, u1):
+    """The placement, keeping only u0 … u1 of the part: one cut part shown as two pieces (a flex
+    wall's fixed half and its lid)."""
+    band, pieces = rect(u0, -1e5, u1, 1e5), place.pieces
+    place.pieces = lambda polys, t: pieces([g for p in polys for c in [p.intersection(band)]
+                                            for g in getattr(c, "geoms", [c]) if g.geom_type == "Polygon" and not g.is_empty], t)
+    return place
+
+
+def _flex_wall(part, local, bends, hinge, origin, U, V):
+    """A surrounding wall placed with its bends, the part from the hinge (u) on as the lid."""
+    place = lambda **kw: Placement(origin, U, V, 1, bends, **kw)
+    return [(part, _clip(place(), -1e5, hinge), local), (part, _clip(place(lid=True), hinge, 1e5), local)]
+
+
+@recipe
+def FlexBox(box, parts):
+    """Sides y × h with all four corners rounded (r), the latch at the front top, at X = x, between
+    the compartments and at X = 0. The flex wall goes round them from the front under the latch,
+    down, along the bottom, up the back, over the top and down to its latch hole; it is jointed to
+    the sides up to the back, the rest (from the back top corner) is the lid. The dividers stand in
+    the wall's finger holes, which sit t towards X = 0 from the compartments' sx."""
+    t, x, y, h, r, L = box.thickness, box.x, box.y, box.h, box.radius, box.latchsize
+    wall, *sides = parts
+    local = ~(wall.record.start * Affine.translation(0, 0.25 * t))
+    bends = _flex_bends(wall.record, local, r, y)
+    out = _flex_wall(wall, local, bends, bends[len(bends) // 2][0], (-t, 0, h - r - L), (0, 0, -1), X)
+    # a side's local origin is r behind the front, where its bottom straight starts
+    walls, pos = [Placement((x, r, 0), Y, Z, 1)], -t / 2
+    for s in box.sx[:-1]:
+        pos += s + t
+        walls.append(Placement((pos - 1.5 * t, r, 0), Y, Z, 1))   # the wall's v = 0 is at X = -t
+    walls.append(Placement((0, r, 0), Y, Z, -1))
+    return out + list(zip(sides, walls))
+
+
+@recipe
+def FlexBox4(box, parts):
+    """Sides y × h, the top corners rounded (r), the latch at the bottom of the front (Y = 0). The
+    flex wall's fingers start in the bottom's back edge; it is jointed up the back, then, from the
+    back top corner, the lid: over the top and down the front to the latch, t past the bottom."""
+    t, x, y, r = box.thickness, box.x, box.y, box.radius
+    wall, right, left, bottom = parts
+    local = ~(wall.record.start * Affine.translation(t, 0.25 * t))
+    bends = _flex_bends(wall.record, local, r, y)
+    return _flex_wall(wall, local, bends, bends[0][0], (-t, y, 0), Z, X) + [
+        (right, Placement((x, 0, 0), Y, Z, 1)),
+        (left, Placement((0, 0, 0), Y, Z, -1)),
+        (bottom, Placement((0, y, 0), (0, -1, 0), X, -1)),   # its open (e) edge at the front
+    ]
+
+
+@recipe
+def FlexBox3(box, parts):
+    """Box x × y × z, the sides' back top corner rounded (r). The flex wall's fingers start in the
+    bottom's back edge; it goes up the back and, from the back top corner, is the lid: over the
+    corner (its flex 5 % short of the quarter circle) and, widened by the clearance d each side, over
+    the top to t past the front. Lid sides (drawn from the back bottom corner, the arc round the
+    flex's outer face, centred on the corner's) and the lid front hang h down from it, d clear of the
+    sides and against the front."""
+    t, x, y, z, r, d, h = box.thickness, box.x, box.y, box.z, box.radius, box.d, box.h
+    wall, bottom, lid_front, lid_right, lid_left, right, left, front = parts
+    local = ~(wall.record.start * Affine.translation(t, d + t))
+    bends = [(u0, u1, 90, r) for u0, u1, _, _ in _flex_bends(wall.record, local, r, y)]
+    if r < h:   # lidSide's bottom edge, its front t in front of the box
+        base = y + 2 * t
+    else:
+        base = y + (r + t) * math.sin(math.acos((r - h) / (r + t))) - r + t
+    lid = dict(lid=True)
+    return _flex_wall(wall, local, bends, bends[0][0], (-t, y, 0), Z, X) + [
+        (bottom, Placement((0, 0, 0), Y, X, 1)),                             # y × x
+        (lid_front, Placement((-t - d, -t, z), (0, 0, -1), X, 1, **lid)),     # from the lid top down
+        (lid_right, Placement((x + t + d, base - t, z - h), Z, (0, -1, 0), 1, **lid)),
+        (lid_left, Placement((-t - d, base - t, z - h), Z, (0, -1, 0), -1, **lid)),
+        (right, Placement((x, 0, 0), Y, Z, 1)),
+        (left, Placement((0, 0, 0), Y, Z, -1)),
+        (front, Placement((0, 0, 0), X, Z, 1)),
+    ]
+
+
+def _arc(c, r, a0, a1, n):
+    """The n + 1 corners of n chords on the circle round c (in a plane), from a0 to a1 degrees."""
+    return [(c[0] + r * math.cos(math.radians(a0 + (a1 - a0) * k / n)),
+             c[1] + r * math.sin(math.radians(a0 + (a1 - a0) * k / n))) for k in range(n + 1)]
+
+
+def _guides(parts, path, side):
+    """Panels across X (v = 0 at X = 0), one per segment of path (world Y, Z), in order: their inner
+    faces on it, the thickness towards the groove."""
+    return [(p, Placement((0, *a), (0, b[0] - a[0], b[1] - a[1]), X, side)) for p, a, b in zip(parts, path, path[1:])]
+
+
+def _rails(part, t, r, h, width):
+    """The rails glued on the side walls' inner faces round the top front corner (centre Y = r,
+    Z = h - r): per side an outer one (radii r … r + t) and an inner one (r - 2.5 t … r - 1.5 t), the
+    door's groove between them. Drawn with the top leg along u, the front corner at the far end
+    turning up: (u, v) → (Y, Z) = (r, h - r) + (cx - u, cy - v), (cx, cy) its centre, from its
+    bounds (the front leg's outer face at cx + ro, the top leg's at cy - ro)."""
+    polys = sorted(polygons_of(loops_of(part, local_matrix(part.record))), key=lambda q: -q.area)
+    out = []
+    for i, q in enumerate(polys[:4]):
+        ro = r + t if i < 2 else r - 1.5 * t
+        _, miny, maxx, _ = q.bounds
+        cx, cy = maxx - ro, miny + ro
+        x0, side = (0, 1) if i % 2 == 0 else (width, -1)
+        out.append((part, Placement((x0, r + cx, h - r + cy), (0, -1, 0), (0, 0, -1), side,
+                                    keep=lambda p, pt=q.representative_point(): p.contains(pt))))
+    return out
+
+
+def _fillets(box, part, c, d1, d2, width):
+    """cornerRadius(two=True): two r × r squares less a quarter disc (the second turned half round,
+    r + spacing up), glued on the side walls' inner faces in the corner c (world Y, Z) of the walls
+    along d1 and d2, the door's groove going round between them and the guide panels. The first:
+    (u, v) → c + (r - u)·d1 + v·d2."""
+    r, s = box.radius, box.spacing
+    U, V = (0, -d1[0], -d1[1]), (0, *d2)
+    side = 1 if _cross(U, V)[0] > 0 else -1   # thickness +X on the left wall
+    first, second = Point(0.9 * r, 0.1 * r), Point(0.1 * r, r + s - 0.1 * r)
+    return [(part, Placement((0, c[0] + r * d1[0], c[1] + r * d1[1]), U, V, side, keep=lambda q: q.contains(first))),
+            (part, Placement((width, c[0] + (r + s) * d2[0], c[1] + (r + s) * d2[1]), (0, *d1), (0, -d2[0], -d2[1]),
+                             -side, keep=lambda q: q.contains(second)))]
+
+
+def _handle(door, t):
+    """The handle standing out of a sliding door's outer face, its fingers in the door's holes (door u
+    = t, from v = t)."""
+    pos, T = door.frame_at(t)
+    N = tuple(door.side * c for c in _cross(T, door.V))   # out of the door
+    origin = _add(_add(_add(pos, N, t), T, -t / 2), door.V, t)
+    return Placement(origin, N, door.V, -door.side, lid=True)
+
+
+@recipe
+def BreadBox(box, parts):
+    """Sides l = x deep (drawn as seen from the left, the front at the right: (u, v) from the inner
+    back bottom corner → Y = l - u, Z = v), back wall, bottom (out t at the front), the fixed top
+    over the back half. Inside, guide panels go up 2.5 t in front of the back wall and round under
+    the top (n chords of radius r - 2.5 t) to its front end, the corner fillets behind them: that
+    groove takes the door when open. Closed, the door (a lid) runs in the groove between the rails
+    at the front: from the bottom (its handle end) up the front, round the corner and back under
+    the top, its outer face on the outer rails (radius r)."""
+    t, l, w, h, r, n = box.thickness, box.x, box.y, box.h, box.radius, box.n
+    q = list(parts)
+    side = lambda p: ~(p.record.start * Affine.translation(t, t))
+    out = [(q[0], Placement((0, l, 0), (0, -1, 0), Z, 1), side(q[0])),
+           (q[1], Placement((w, l, 0), (0, -1, 0), Z, -1), side(q[1])),
+           (q[2], Placement((w, l, 0), (-1, 0, 0), Z, 1)),               # back
+           (q[3], Placement((0, l, 0), (0, -1, 0), X, -1)),              # bottom
+           (q[4], Placement((0, l, h), (0, -1, 0), X, 1))]               # top, back half
+    rho = r - t
+    door = Placement((w - 0.1 * t, t, 0), Z, (-1, 0, 0), 1, bends=[(h - r, h - r + math.pi * rho / 2, 90, rho)], lid=True)
+    out += [(q[5], door), (q[6], _handle(door, t))]
+    rr = r - 2.5 * t
+    path = [(l - 2.5 * t, 0)] + _arc((l - r, h - r), rr, 0, 90, n) + [(l / 2, h - 2.5 * t)]
+    out += _guides(q[7:9 + n], path, 1)
+    out += _rails(q[9 + n], t, r, h, w)
+    out += _fillets(box, q[10 + n], (l, h), (-1, 0), (0, -1), w)
+    return out
+
+
+@recipe
+def ShutterBox(box, parts):
+    """Sides l = y deep (drawn as seen from the left, the front at the right: (u, v) from the inner
+    back bottom corner → Y = l - u, Z = v), back wall (single: full height, out t at the top), front
+    wall h - r high, bottom. Guide panels run 2.5 t over the bottom (double: from the back, down
+    2.5 t in front of the back wall first) and round the front (n chords of radius r - 2.5 t) up
+    2.5 t behind the front wall, the corner fillets under them: that groove takes the shutter when
+    open. Closed, the shutter (a lid) runs in the groove between the rails at the top, its outer
+    face on the outer rails (radius r): single from the back wall (its handle end) forward, round
+    the corner and down behind the front wall; double from the top of the back wall round both
+    corners (its straight handle end bent with the first)."""
+    t, w, l, h, r, n = box.thickness, box.x, box.y, box.h, box.radius, box.n
+    double = box.style == "double"
+    left, right, back, front, *q = parts
+    side = lambda p: ~(p.record.start * Affine.translation(t, t))
+    out = [(left, Placement((0, l, 0), (0, -1, 0), Z, 1), side(left)),
+           (right, Placement((w, l, 0), (0, -1, 0), Z, -1), side(right)),
+           (back, Placement((w, l, 0), (-1, 0, 0), Z, 1)),
+           (front, Placement((0, 0, 0), X, Z, 1))]
+    if double:
+        out += _fillets(box, q.pop(0), (l, 0), (0, 1), (-1, 0), w)       # back bottom corner
+    out += _fillets(box, q.pop(0), (0, 0), (0, 1), (1, 0), w)            # front bottom corner
+    out += _rails(q.pop(0), t, r, h, w)
+    out.append((q.pop(0), Placement((0, l, 0), (0, -1, 0), X, -1)))     # bottom
+    rho = r - t
+    a = math.pi * rho / 2
+    if double:
+        door = Placement((0.1 * t, l - t, h - r), Z, X, 1, bends=[(0, a, 90, rho), (a + l - 2 * r, 2 * a + l - 2 * r, 90, rho)],
+                         lid=True)
+    else:
+        door = Placement((0.1 * t, l, h - t), (0, -1, 0), X, 1, bends=[(l - r, l - r + a, 90, rho)], lid=True)
+    out += [(q.pop(0), door), (q.pop(0), _handle(door, t))]
+    rr, up = r - 2.5 * t, h - 2 * r > 2 * t   # the generator's straight guides up at the ends
+    ends = [(2.5 * t, h - r)] if up else []
+    if double:
+        path = [(l - 2.5 * t, h - r)][:len(ends)] + _arc((l - r, r), rr, 0, -90, n) + _arc((r, r), rr, -90, -180, n) + ends
+    else:
+        path = [(l, 2.5 * t)] + _arc((r, r), rr, -90, -180, n) + ends
+    return out + _guides(q, path, -1)
+
+
+@recipe
+def FlexBook(box, parts):
+    """A book lying on its base, the spine on the left: render() swaps y and h, so x is the covers'
+    width, y the book's height (along Y), h its thickness. The D-shaped sides (u from the lid down,
+    v from the fore-edge at X = S to the spine, a half disc of radius h/2 round X = r) close the
+    ends; the latch wall stands at the fore-edge and the inner wall at the half discs, both drawn
+    from the lid down. The cover, drawn from the base's fore-edge, bends 180° round the half discs
+    (its flex is t longer than the arc) into the lid, closed, the latch wall's tab through it. On
+    the lid by the tab: per side a notched bracket lying flat, pinned through its square hole into
+    the lid's, a plain one on it; between them the bolt, its wings in the notches and its tip
+    through the tab's slot, and the grip plate glued on the bolt."""
+    t, x, y, h, l = box.thickness, box.x, box.y, box.h, box.latchsize
+    r = h / 2
+    cover, inner, latch, side1, side2, *hardware = parts
+    S = x + 2 * t + r               # the sides' fore-edge: the latch wall's outer face
+    local = local_matrix(cover.record)
+    bends = _flex_bends(cover.record, local, r, h)
+    down = (0, 0, -1)
+    out = _flex_wall(cover, local, bends, bends[0][1], (S + t, -2 * t, 0), (-1, 0, 0), Y) + [
+        (inner, Placement((r, 0, h), down, Y, 1), ~(inner.record.start * Affine.translation(0, t))),
+        (latch, Placement((S - t, 0, h), down, Y, 1),
+         ~(latch.record.start * Affine.translation(0 if box.recess_wall else 3 * t, t))),
+        (side1, Placement((S, 0, h), down, (-1, 0, 0), -1)),
+        (side2, Placement((S, y, h), down, (-1, 0, 0), 1))]
+    # the lid's square holes are at (S - 2.5 t, y/2 ± (l/2 + 3.5 t)); the brackets' bottoms face the bolt
+    L = lambda o, U, V, side=1: Placement(o, U, V, side, lid=True)
+    top, mid = h + t, y / 2         # the lid's outer face
+    brackets = lambda z: [L((S - 5 * t, mid + l / 2, z), X, Y), L((S, mid - l / 2, z), (-1, 0, 0), (0, -1, 0))]
+    pins = [L((S - 3 * t, mid + s * (l / 2 + 3.5 * t) - t / 2, h), X, Z, -1) for s in (1, -1)]
+    held, plain = brackets(top), brackets(top + t)
+    places = [held[0], pins[0], held[1], pins[1], plain[0], plain[1],
+              L((S - 5 * t, mid - l / 2, top + t), X, Y),                    # grip plate
+              L((S - 5 * t, mid + l / 2 + 2 * t, top), (0, -1, 0), X)]      # bolt, its tip towards +X
+    return out + list(zip(hardware, places))
+
+
+@recipe
+def DoubleFlexDoorBox(box, parts):
+    """Sides x × h at Y = 0 and y, their corners rounded r, drawn from r along the bottom; the wall,
+    y + 2t wide over both, bent round them from the latch at the middle of the top (X = x/2):
+    right, down, along the bottom, up and back to the middle. Its two top halves, from the latches
+    to the flex at the top corners, are the doors (closed)."""
+    t = box.thickness
+    wall, front, back = parts
+    x, h, y, r = wall.record.args[:4]   # surroundingWall(x, h, y, r): its y is the box's h
+    local = ~(wall.record.start * Affine.translation(0, 0.25 * t))
+    bends = _flex_bends(wall.record, local, r, h)
+    a, b = bends[0][0], bends[-1][1]
+    place = lambda **kw: Placement((x / 2, -t, h), X, Y, 1, bends, **kw)
+    return [(wall, _clip(place(), a, b), local),
+            (wall, _clip(place(lid=True), -1e5, a), local),
+            (wall, _clip(place(lid=True), b, 1e5), local),
+            (front, Placement((r, 0, 0), X, Z, 1)),
+            (back, Placement((r, y, 0), X, Z, -1))]
+
+
+@recipe
+def UBox(box, parts):
+    """The U (y × h, its bottom corners rounded r, drawn from its bottom's corner) at X = 0 (seen
+    from outside, u back to front) and at X = x; the wall, x + 2t wide over both, bent round it
+    from the front's top: down, across the bottom and up the back. drawLid's part closes it at h as
+    in UniversalBox; the lid style is drawn y × x (a chest across the U's), so _lid's parts are
+    turned a quarter round Z."""
+    t, e, x, y, h, r = box.thickness, box.top_edge, box.x, box.y, box.h, box.radius
+    left, right, wall, *others = parts
+    w = box.edges["f"].spacing()
+    back = box.topEdges(e)[1]   # the wall's first top edge, at its end
+    local = ~(wall.record.start * Affine.translation(box.edges.get(back, back).spacing(), 0))
+    # radius 0: square corners, their flex cuts 0 long
+    bends = [(u0, max(u1, u0 + 1e-3), a, rr) for u0, u1, a, rr in _flex_bends(wall.record, local, r, y)]
+    out = [(left, Placement((0, y, 0), (0, -1, 0), Z, 1), ~(left.record.start * Affine.translation(w, w))),
+           (right, Placement((x, 0, 0), Y, Z, 1), ~(right.record.start * Affine.translation(w, w))),
+           (wall, Placement((-t, 0, h), (0, 0, -1), X, 1, bends), local)]
+    lid = lambda z, at=(0, 0), U=X, V=Y, side=1: Placement((*at, z), U, V, side, lid=True)
+    mx = (-1, 0, 0)
+    if e in "cfFhŠY":
+        tops = [Placement((0, 0, h), X, Y, 1)]
+    else:
+        tops = {"E": [lid(h + t), lid(h)], "i": [lid(h)], "L": [lid(h)], "v": [lid(h, (x, y), mx, (0, -1, 0))],
+                "k": [lid(h), lid(h, (x, 0), mx, Y, -1)]}.get(e, [])
+    out += list(zip(others, tops))
+    # the lid frame's X (y long) is world Y, its Y (x long) world -X from X = x
+    return out + [(p, _turned(q, (x / 2, x / 2, 0), Z, 90)) for p, q in _lid(box, others[len(tops):], y, x, h)]
+
+
 @recipe
 def SlidingDrawer(box, parts):
     """A sleeve open at the front (y = 0) and the drawer in it, centred with the play all round and
