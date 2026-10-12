@@ -1,0 +1,91 @@
+{
+  "fill" : {
+    "automatic-gradient" : "display-p3:0.16000,0.17000,0.42000,1.00000"
+  },
+  "fill-specializations" : [
+    {
+      "appearance" : "dark",
+      "value" : {
+        "automatic-gradient" : "display-p3:0.07000,0.07000,0.20000,1.00000"
+      }
+    }
+  ],
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "fill" : {
+            "solid" : "display-p3:1.00000,0.30000,0.12000,1.00000"
+          },
+          "glass" : true,
+          "image-name" : "laser.svg",
+          "name" : "laser"
+        }
+      ],
+      "shadow" : {
+        "kind" : "layer-color",
+        "opacity" : 0.7
+      },
+      "specular" : true,
+      "translucency" : {
+        "enabled" : false,
+        "value" : 0.5
+      }
+    },
+    {
+      "layers" : [
+        {
+          "fill" : {
+            "solid" : "extended-gray:1.00000,1.00000"
+          },
+          "glass" : true,
+          "image-name" : "lid.svg",
+          "name" : "lid"
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "specular" : true,
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.25
+      }
+    },
+    {
+      "layers" : [
+        {
+          "fill" : {
+            "solid" : "extended-gray:0.88000,1.00000"
+          },
+          "glass" : true,
+          "image-name" : "left.svg",
+          "name" : "left side"
+        },
+        {
+          "fill" : {
+            "solid" : "extended-gray:0.68000,1.00000"
+          },
+          "glass" : true,
+          "image-name" : "right.svg",
+          "name" : "right side"
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "specular" : true,
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.35
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "squares" : [
+      "macOS"
+    ]
+  }
+}

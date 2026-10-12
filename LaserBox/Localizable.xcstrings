@@ -1,0 +1,276 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "%lld boxes": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld box"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld boxes"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld scatola"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld scatole"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "About This Box": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Informazioni sulla scatola"
+          }
+        }
+      }
+    },
+    "About this box": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Informazioni su questa scatola"
+          }
+        }
+      }
+    },
+    "All Boxes": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tutte le scatole"
+          }
+        }
+      }
+    },
+    "Can’t Draw This Box": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossibile disegnare la scatola"
+          }
+        }
+      }
+    },
+    "Can’t Start boxes.py": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossibile avviare boxes.py"
+          }
+        }
+      }
+    },
+    "Categories": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Categorie"
+          }
+        }
+      }
+    },
+    "Couldn’t Export the File": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossibile esportare il file"
+          }
+        }
+      }
+    },
+    "DXF…": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DXF…"
+          }
+        }
+      }
+    },
+    "Export": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esporta"
+          }
+        }
+      }
+    },
+    "Export DXF…": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esporta DXF…"
+          }
+        }
+      }
+    },
+    "Export SVG…": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esporta SVG…"
+          }
+        }
+      }
+    },
+    "Export the cut file": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esporta il file di taglio"
+          }
+        }
+      }
+    },
+    "Hide the parameters": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nascondi i parametri"
+          }
+        }
+      }
+    },
+    "LaserBox": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LaserBox"
+          }
+        }
+      }
+    },
+    "Loading the Boxes…": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Caricamento delle scatole…"
+          }
+        }
+      }
+    },
+    "No box is open.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessuna scatola aperta."
+          }
+        }
+      }
+    },
+    "Parameters": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parametri"
+          }
+        }
+      }
+    },
+    "Python isn’t included in the app. Run scripts/bundle-runtime.sh and build again.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Python non è incluso nell’app. Esegui scripts/bundle-runtime.sh e ricompila."
+          }
+        }
+      }
+    },
+    "Reset to Defaults": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ripristina valori predefiniti"
+          }
+        }
+      }
+    },
+    "SVG…": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SVG…"
+          }
+        }
+      }
+    },
+    "Search Boxes": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cerca scatole"
+          }
+        }
+      }
+    },
+    "Show the parameters": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostra i parametri"
+          }
+        }
+      }
+    },
+    "The boxes.py engine quit unexpectedly.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il motore di boxes.py si è chiuso inaspettatamente."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

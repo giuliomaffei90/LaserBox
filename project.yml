@@ -1,0 +1,52 @@
+name: LaserBox
+options:
+  bundleIdPrefix: com.giuliomaffei
+  deploymentTarget:
+    macOS: "14.0"
+  developmentLanguage: en
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  LaserBox:
+    type: application
+    platform: macOS
+    sources:
+      - path: LaserBox
+      - path: Runtime
+        type: folder
+        buildPhase: resources
+    info:
+      path: LaserBox/Info.plist
+      properties:
+        CFBundleDisplayName: LaserBox
+        CFBundleDevelopmentRegion: en
+        CFBundleLocalizations: [en, it]
+        LSApplicationCategoryType: public.app-category.graphics-design
+        NSHumanReadableCopyright: "Box generators: boxes.py by Florian Festi (GPL-3.0)"
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: com.autodesk.dxf
+            UTTypeDescription: DXF Drawing
+            UTTypeConformsTo: [public.data]
+            UTTypeTagSpecification:
+              public.filename-extension: [dxf]
+    postCompileScripts:
+      - name: Compile boxes.py translations
+        basedOnDependencyAnalysis: false
+        script: |
+          for po in "$SRCROOT"/Translations/*.po; do
+            [ -e "$po" ] || continue
+            lang=$(basename "$po" .po)
+            dir="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/locale/$lang/LC_MESSAGES"
+            mkdir -p "$dir"
+            /opt/homebrew/bin/msgfmt -o "$dir/boxes.py.mo" "$po"
+          done
+    settings:
+      base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        PRODUCT_BUNDLE_IDENTIFIER: com.giuliomaffei.LaserBox
+        CODE_SIGN_IDENTITY: "-"
+        ENABLE_HARDENED_RUNTIME: NO
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
