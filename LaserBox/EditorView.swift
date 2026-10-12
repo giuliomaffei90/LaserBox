@@ -444,6 +444,7 @@ final class AssemblyStage {
     var optional: [(node: SCNNode, piece: Piece)] = []  // lids and decorations, shown or hidden
     var moving: [(node: SCNNode, home: SCNVector3, away: SCNVector3?, opacity: CGFloat)] = []  // see explode
     var exploded = false
+    var zoom: CGFloat = 1   // how much the exploded view needs the camera to zoom out
     var size: CGFloat = 0
     var turn: CGFloat = 0   // the gallery's yaw for this box
     let scene = SCNScene()
@@ -501,8 +502,10 @@ final class AssemblyStage {
         let (minV, maxV) = box.boundingBox
         let dx = maxV.x - minV.x, dy = maxV.y - minV.y, dz = maxV.z - minV.z
         let size = sqrt(dx * dx + dy * dy + dz * dz)
-        let away = Self.explosion(built.map(\.1), centre: SCNVector3((minV.x + maxV.x) / 2, (minV.y + maxV.y) / 2, (minV.z + maxV.z) / 2),
-                                  size: size)
+        // only the editor explodes the box: the gallery's cards skip the work
+        let (away, spread) = all ? Self.explosion(built.map(\.1), centre: SCNVector3((minV.x + maxV.x) / 2, (minV.y + maxV.y) / 2,
+                                                                                      (minV.z + maxV.z) / 2), size: size) : ([:], size)
+        zoom = max(1, spread / size)
         moving = built.map { node, piece in (node, node.position, piece.part.flatMap { away[$0] }, node.opacity) }
         place()
         box.position = SCNVector3(-(minV.x + maxV.x) / 2, -(minV.y + maxV.y) / 2, -(minV.z + maxV.z) / 2)
@@ -514,45 +517,94 @@ final class AssemblyStage {
     }
 
     /// How far the exploded view pulls the parts out: a share of their distance from the box's centre,
-    /// plus a share of the box's size so that parts near the middle come off too; and how much the
-    /// camera zooms out for it.
+    /// plus a share of the box's size so that parts near the middle come off too.
     static let spread: CGFloat = 0.6
     static let gap: CGFloat = 0.08
-    static let zoom: CGFloat = 1.5
 
-    /// Each part's way out of the box in the exploded view: a flat part along its normal, by its
+    /// Each part's way out of the box in the exploded view. A flat part goes along its normal, by its
     /// distance from the centre that way (a divider through the middle stays, the walls round it go
     /// out, the floor down, the lid up); a bent one (its pieces facing different ways) straight away
-    /// from the centre. Decorations not cut from the sheet have no part: they fade out instead.
-    static func explosion(_ pieces: [Piece], centre: SCNVector3, size: CGFloat) -> [Int: SCNVector3] {
-        func vec(_ a: [Double]) -> SCNVector3 { SCNVector3(a[0], a[1], a[2]) }
-        func dot(_ a: SCNVector3, _ b: SCNVector3) -> CGFloat { a.x * b.x + a.y * b.y + a.z * b.z }
-        var parts: [Int: (normal: SCNVector3, flat: Bool, sum: SCNVector3, count: CGFloat)] = [:]
+    /// from the centre. Parts that would still go through each other (dividers slotted into each
+    /// other, a slope through a divider) are then settled one by one, those going farthest first: a
+    /// part hitting one already settled is lifted above it (lowered below it, if it was going down),
+    /// so the inner ones end up stacked in layers. Decorations not cut from the sheet have no part:
+    /// they fade out instead.
+    /// The whole is then moved back onto the box's centre; returns the moves and the exploded parts'
+    /// diagonal.
+    static func explosion(_ pieces: [Piece], centre: SCNVector3, size: CGFloat) -> (away: [Int: SCNVector3], size: CGFloat) {
+        typealias V3 = SIMD3<Double>
+        /// A piece as a box: its centre, its axes (u, v, normal) and half its extent along each.
+        struct Slab { let centre: V3; let axes: [V3]; let half: V3 }
+        let size = Double(size), c0 = V3(Double(centre.x), Double(centre.y), Double(centre.z))
+        var parts: [Int: (normal: V3, flat: Bool, slabs: [Slab])] = [:]
         for piece in pieces {
             guard let part = piece.part, let ring = piece.rings.first, !ring.isEmpty else { continue }
-            let u = vec(piece.u), v = vec(piece.v), s = CGFloat(piece.side)
-            let n = SCNVector3(s * (u.y * v.z - u.z * v.y), s * (u.z * v.x - u.x * v.z), s * (u.x * v.y - u.y * v.x))
-            let cu = ring.reduce(0) { $0 + $1[0] } / Double(ring.count), cv = ring.reduce(0) { $0 + $1[1] } / Double(ring.count)
-            let o = vec(piece.origin), half = CGFloat(piece.t) / 2
-            let c = SCNVector3(o.x + CGFloat(cu) * u.x + CGFloat(cv) * v.x + half * n.x,
-                               o.y + CGFloat(cu) * u.y + CGFloat(cv) * v.y + half * n.y,
-                               o.z + CGFloat(cu) * u.z + CGFloat(cv) * v.z + half * n.z)
+            let u = V3(piece.u[0], piece.u[1], piece.u[2]), v = V3(piece.v[0], piece.v[1], piece.v[2])
+            let n = simd_cross(u, v) * Double(piece.side)
+            let us = ring.map { $0[0] }, vs = ring.map { $0[1] }
+            let (u0, u1, v0, v1) = (us.min()!, us.max()!, vs.min()!, vs.max()!)
+            let o = V3(piece.origin[0], piece.origin[1], piece.origin[2])
+            let slab = Slab(centre: o + (u0 + u1) / 2 * u + (v0 + v1) / 2 * v + piece.t / 2 * n,
+                            axes: [u, v, n], half: V3((u1 - u0) / 2, (v1 - v0) / 2, piece.t / 2))
             if var p = parts[part] {
-                p.flat = p.flat && abs(dot(p.normal, n)) > 0.999
-                p.sum = SCNVector3(p.sum.x + c.x, p.sum.y + c.y, p.sum.z + c.z)
-                p.count += 1
+                p.flat = p.flat && abs(simd_dot(p.normal, n)) > 0.999
+                p.slabs.append(slab)
                 parts[part] = p
             } else {
-                parts[part] = (n, true, c, 1)
+                parts[part] = (n, true, [slab])
             }
         }
-        return parts.mapValues { p in
-            let d = SCNVector3(p.sum.x / p.count - centre.x, p.sum.y / p.count - centre.y, p.sum.z / p.count - centre.z)
+        var away = parts.mapValues { p -> V3 in
+            let d = p.slabs.reduce(V3.zero) { $0 + $1.centre } / Double(p.slabs.count) - c0
             let w = p.flat ? p.normal : d
-            let along = p.flat ? dot(p.normal, d) : sqrt(dot(d, d))   // the distance out, along w
-            let k = abs(along) < 0.01 * size ? 0 : (abs(along) * spread + gap * size) / abs(along) * (p.flat ? along : 1)
-            return SCNVector3(w.x * k, w.y * k, w.z * k)
+            let along = p.flat ? simd_dot(p.normal, d) : simd_length(d)   // the distance out, along w
+            if abs(along) < 0.01 * size { return .zero }
+            return w * ((abs(along) * Double(spread) + Double(gap) * size) / abs(along) * (p.flat ? along : 1))
         }
+
+        // Separating axis test between two slabs moved by da and db; touching faces don't count.
+        func hit(_ a: Slab, _ da: V3, _ b: Slab, _ db: V3) -> Bool {
+            let t = b.centre + db - a.centre - da
+            var axes = a.axes + b.axes
+            for x in a.axes { for y in b.axes { axes.append(simd_cross(x, y)) } }
+            for axis in axes {
+                let l = simd_length(axis)
+                if l < 1e-6 { continue }
+                let L = axis / l
+                let ra = (0..<3).reduce(0.0) { $0 + a.half[$1] * abs(simd_dot(a.axes[$1], L)) }
+                let rb = (0..<3).reduce(0.0) { $0 + b.half[$1] * abs(simd_dot(b.axes[$1], L)) }
+                if abs(simd_dot(t, L)) > ra + rb - 0.3 { return false }
+            }
+            return true
+        }
+        func bounds(_ k: Int) -> (lo: V3, hi: V3) {
+            var lo = V3(repeating: .infinity), hi = V3(repeating: -.infinity)
+            for s in parts[k]!.slabs {
+                let r = (0..<3).reduce(V3.zero) { $0 + s.half[$1] * abs(s.axes[$1]) }
+                lo = simd_min(lo, s.centre + away[k]! - r); hi = simd_max(hi, s.centre + away[k]! + r)
+            }
+            return (lo, hi)
+        }
+        var settled: [(part: Int, lo: V3, hi: V3)] = []   // they don't move any more
+        for k in parts.keys.sorted(by: { (simd_length(away[$0]!), $1) > (simd_length(away[$1]!), $0) }) {
+            let up = away[k]!.z >= -1e-6
+            for _ in 0..<60 {
+                let box = bounds(k)
+                let hits = settled.filter { j in
+                    guard all(box.lo .< j.hi) && all(j.lo .< box.hi) else { return false }
+                    return parts[k]!.slabs.contains { a in parts[j.part]!.slabs.contains { b in hit(a, away[k]!, b, away[j.part]!) } }
+                }
+                if hits.isEmpty { break }
+                away[k]!.z += up ? hits.map(\.hi.z).max()! - box.lo.z + 0.04 * size : hits.map(\.lo.z).min()! - box.hi.z - 0.04 * size
+            }
+            let box = bounds(k)
+            settled.append((k, box.lo, box.hi))
+        }
+        var lo = V3(repeating: .infinity), hi = V3(repeating: -.infinity)
+        for b in settled { lo = simd_min(lo, b.lo); hi = simd_max(hi, b.hi) }
+        guard !parts.isEmpty else { return ([:], CGFloat(size)) }
+        let shift = (lo + hi) / 2 - c0
+        return (away.mapValues { SCNVector3($0.x - shift.x, $0.y - shift.y, $0.z - shift.z) }, CGFloat(simd_length(hi - lo)))
     }
 
     /// Pulls the parts apart (or puts them back), animated: decorations fade, the camera zooms out.
@@ -563,8 +615,8 @@ final class AssemblyStage {
         SCNTransaction.animationTimingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
         place()
         if let cam = camera.camera {
-            cam.orthographicScale *= Double(on ? Self.zoom : 1 / Self.zoom)
-            sun.light?.orthographicScale *= on ? Self.zoom : 1 / Self.zoom
+            cam.orthographicScale *= Double(on ? zoom : 1 / zoom)
+            sun.light?.orthographicScale *= on ? zoom : 1 / zoom
         }
         SCNTransaction.commit()
     }
@@ -594,9 +646,9 @@ final class AssemblyStage {
         camera.look(at: SCNVector3Zero)
         cam.zFar = Double(size) * 20
         cam.screenSpaceAmbientOcclusionRadius = Double(size) * 0.05
-        if exploded { cam.orthographicScale *= Double(Self.zoom) }
+        if exploded { cam.orthographicScale *= Double(zoom) }
         let light = sun.light!
-        light.orthographicScale = Double(size) * 1.2 * (exploded ? Self.zoom : 1)
+        light.orthographicScale = Double(size) * 1.2 * (exploded ? zoom : 1)
         light.zNear = 1; light.zFar = Double(size) * 8   // the shadow map must reach the whole box
         sun.position = SCNVector3(size * 0.9, size * 2.2, size * 1.4)
         sun.look(at: SCNVector3Zero)
