@@ -536,6 +536,17 @@ final class AssemblyStage {
         "pen": SheetMaterial.surface(NSColor(red: 0.86, green: 0.89, blue: 0.92, alpha: 1), roughness: 0.15, edge: "float3(0.95)"),
         "pen-cap": SheetMaterial.surface(NSColor(red: 0.10, green: 0.25, blue: 0.75, alpha: 1), roughness: 0.35, edge: "float3(0.9)"),
         "pen-tip": SheetMaterial.surface(NSColor(red: 0.80, green: 0.80, blue: 0.82, alpha: 1), roughness: 0.2, edge: "float3(0.9)"),
+        "bottle": SheetMaterial.surface(NSColor(red: 0.07, green: 0.20, blue: 0.10, alpha: 1), roughness: 0.1, edge: "float3(1.0)"),
+        "bottle-amber": SheetMaterial.surface(NSColor(red: 0.30, green: 0.14, blue: 0.04, alpha: 1), roughness: 0.1, edge: "float3(1.0)"),
+        "capsule-red": SheetMaterial.surface(NSColor(red: 0.50, green: 0.06, blue: 0.10, alpha: 1), roughness: 0.3, edge: "float3(0.9)"),
+        "capsule-gold": SheetMaterial.surface(NSColor(red: 0.78, green: 0.62, blue: 0.30, alpha: 1), roughness: 0.3, edge: "float3(0.9)"),
+        "label": SheetMaterial.surface(NSColor(red: 0.95, green: 0.92, blue: 0.84, alpha: 1), roughness: 0.8, edge: "float3(0.95)"),
+        "tin": SheetMaterial.surface(NSColor(red: 0.12, green: 0.12, blue: 0.13, alpha: 1), roughness: 0.4, edge: "float3(1.0)"),
+        "lid-wood": SheetMaterial.surface(NSColor(red: 0.62, green: 0.44, blue: 0.26, alpha: 1), roughness: 0.7, edge: "float3(0.85)"),
+        "spice-red": SheetMaterial.surface(NSColor(red: 0.70, green: 0.20, blue: 0.08, alpha: 1), roughness: 0.9, edge: "float3(1.0)"),
+        "spice-yellow": SheetMaterial.surface(NSColor(red: 0.85, green: 0.62, blue: 0.10, alpha: 1), roughness: 0.9, edge: "float3(1.0)"),
+        "spice-green": SheetMaterial.surface(NSColor(red: 0.38, green: 0.45, blue: 0.20, alpha: 1), roughness: 0.9, edge: "float3(1.0)"),
+        "spice-brown": SheetMaterial.surface(NSColor(red: 0.42, green: 0.26, blue: 0.14, alpha: 1), roughness: 0.9, edge: "float3(1.0)"),
     ]
 
     /// SCNShape extrudes a flat path along z, centred; the path's even-odd rule turns inner rings into holes.

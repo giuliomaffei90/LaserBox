@@ -2954,6 +2954,48 @@ def SpicesRack(box, parts):
                    ~(p.record.start * Affine.translation(0, t))) for j, p in enumerate(feet, 1)]
 
 
+@decoration("SpicesRack", "jar")
+def spice_jars(box):
+    """A spice jar (the can diameter, 1.6 times as long) in about three quarters of the holes,
+    lying out of them tilted up by the rack's angle (adjacent rows d + space apart across their
+    axes): the top of its bottom against the back, its underside on the hole's front edge, so its
+    bottom crosses the shelf just in front of the hole's back edge. Black tins with a label round
+    them and a lid, or spices in glass under a wooden lid, in turn by chance."""
+    import random
+    t, H, r = box.thickness, box.h, box.diameter / 2 - 0.5
+    phi = math.radians(box.angle)
+    c, s = math.cos(phi), math.sin(phi)
+    D = box.hole_distance + box.hole_length + box.space / 2           # see SpicesRack
+    L = 1.6 * box.diameter
+    axis, across = (0, -c, s), (0, s, c)                               # out of the rack; up the bottom, to the back
+    by = r * s + 0.5                                                    # the bottom's centre, from the back
+    sf = (box.hole_distance + box.hole_length - by - r * s) / c        # along the underside to the front edge
+    rng = random.Random(box.numx * box.numy)
+    out = []
+    for i in range(box.numy):
+        z = (i + 1) * H - H / 2 + t / 2                                 # the shelf's top face
+        bottom = (0, D - by, z + r * c - sf * s)
+        for j in range(box.numx):
+            if rng.random() > 0.75:
+                continue
+            centre = Point((box.diameter + box.space) * (j + 0.5), 0)
+
+            def add(kind, rr, a, b):
+                out.extend(dict(p, decoration=kind) for p in Placement(_add(bottom, axis, a), X, across, 1)
+                           .pieces([centre.buffer(rr, quad_segs=8)], b - a))
+
+            if rng.random() < 0.5:     # a tin
+                add("tin", r, 0, 0.3 * L)
+                add("label", r + 0.3, 0.3 * L, 0.75 * L)
+                add("tin", r, 0.75 * L, L - 10)
+                add("tin", r + 0.6, L - 10, L)
+                add("label", r - 6, L, L + 0.2)
+            else:                      # spices in glass
+                add(rng.choice(("spice-red", "spice-yellow", "spice-green", "spice-brown")), r, 0, L - 14)
+                add("lid-wood", r - 1, L - 14, L)
+    return out
+
+
 @recipe
 def StackableBin(box, parts):
     """One compartment row of BinTray standing on stackable feet: sides (u = Y from the open front,
@@ -3038,29 +3080,69 @@ def StorageShelf(box, parts):
     return out + list(zip(parts[first:labels.index("back")], lids))
 
 
+def _winerack_layout(box):
+    """The panel's honeycomb, from replaying its callback with the drawing calls recorded: the
+    walls' finger holes (x, y, angle in radians) and the bottle holes (x, y, r), panel coordinates."""
+    at, walls, holes = [], [], []
+    box.moveTo = lambda x, y, *a: at.append((x, y))
+    box.hole = lambda x, y, r=0.0, *a, **kw: holes.append((at[0][0] + x, at[0][1] + y, r))
+    box.hexFingerHoles = lambda x, y, l, angle=90: walls.append((at[0][0] + x, at[0][1] + y, math.radians(angle)))
+    try:
+        box.wallCB()
+    finally:
+        del box.moveTo, box.hole, box.hexFingerHoles
+    return walls, holes
+
+
 @recipe
 def WineRack(box, parts):
     """Standing on its edge, the bottles going in along Y: the panel with the bottle holes and the
     finger holes (u, v = X, Z) at Y = 0, the back (finger holes only) at Y = h, the front cover
     (bottle holes only) on the panel, and between the panel and the back a wall in every pair of
-    the honeycomb's finger holes, h deep. Where those are comes from replaying the panel's
-    callback with its drawing calls recorded."""
+    the honeycomb's finger holes (see _winerack_layout), h deep."""
     t, h = box.thickness, box.h
-    at, walls = [], []
-    box.moveTo = lambda x, y, *a: at.append((x, y))
-    box.hole = lambda *a, **kw: None
-    box.hexFingerHoles = lambda x, y, l, angle=90: walls.append((x, y, math.radians(angle)))
-    try:
-        box.wallCB()
-    finally:
-        del box.moveTo, box.hole, box.hexFingerHoles
-    ox, oy = at[0]
     out = [Placement((0, 0, 0), X, Z, 1), Placement((0, h, 0), X, Z, -1), Placement((0, -t, 0), X, Z, 1)]
-    for x, y, a in walls:
+    for x, y, a in _winerack_layout(box)[0]:
         U = (math.cos(a), 0, math.sin(a))
         N = (-math.sin(a), 0, math.cos(a))   # U × Y
-        mid = (ox + x + box.delta * U[0], 0, oy + y + box.delta * U[2])
+        mid = (x + box.delta * U[0], 0, y + box.delta * U[2])
         out.append(Placement(_add(mid, N, -t / 2), U, Y, 1))
+    return out
+
+
+@decoration("WineRack", "bottle")
+def wine_bottles(box):
+    """Bordeaux bottles (75 mm across, 300 long; thinner if the holes are, and shorter with them)
+    in about two thirds of the holes, lying on the front cover's hole, their bottom against the
+    back, the neck out of the front: dark green or amber glass, a paper label round the body, the
+    shoulder in steps, a red or gold capsule over the neck."""
+    import random
+    t, h = box.thickness, box.h
+    holes = _winerack_layout(box)[1]
+    rng = random.Random(len(holes))
+    out = []
+    for i, (cx, cz, hr) in enumerate(holes):
+        R = min(37.5, hr - 1)
+        if R < 5 or rng.random() > 0.65:
+            continue
+        k = R / 37.5
+        cz -= hr - R                               # resting on the hole's bottom
+        glass = rng.choice(("bottle", "bottle", "bottle-amber"))
+        capsule = rng.choice(("capsule-red", "capsule-gold"))
+
+        def add(kind, r, a, b):                    # from a to b mm along the bottle, from its bottom
+            out.extend(dict(p, decoration=kind) for p in Placement((0, h - 0.5 - a * k, 0), X, Z, 1)
+                       .pieces([Point(cx, cz).buffer(r * k, quad_segs=8)], (b - a) * k))
+
+        add(glass, 37.5, 0, 70)
+        add("label", 37.8, 70, 160)
+        add(glass, 37.5, 160, 215)
+        steps = 6
+        for j in range(steps):                      # the shoulder, 37.5 down to the neck's 15
+            r = 15 + 22.5 * math.cos(math.pi / 2 * (j + 0.5) / steps)
+            add(glass, r, 215 + 5 * j, 220 + 5 * j)
+        add(capsule, 15.5, 245, 297)
+        add(capsule, 16.0, 297, 300)
     return out
 
 
