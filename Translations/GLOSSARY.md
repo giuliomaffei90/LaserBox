@@ -14,6 +14,8 @@ dare del "tu" non serve perché i testi sono descrittivi; usare forme impersonal
   lettere dei tipi di bordo (e, E, f, F, h, …), unità (mm), nomi di prodotti e marchi
   (NEMA, DIN, Gridfinity, Agricola, IKEA, Raspberry Pi, Arduino, Ponoko…).
 - Le **sigle dei parametri** brevi (x, y, h, hi, sx, sy, sh, d, r, n…) restano uguali (msgstr = msgid).
+  L'app però non le mostra: `PARAMETER_NAMES` in `LaserBox/bridge.py` le sostituisce con un nome
+  (in base al testo d'aiuto, perché "h" non è sempre l'altezza) tradotto con `msgctxt "parameter"`.
 - I **nomi dei parametri** descrittivi (top_edge, bottom_lip, grip_percentage…) si traducono in
   un'etichetta italiana breve, minuscola, senza underscore: "bordo superiore", "labbro inferiore",
   "percentuale di presa". Massimo 3–4 parole.

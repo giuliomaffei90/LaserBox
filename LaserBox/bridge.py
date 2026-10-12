@@ -51,10 +51,18 @@ INFO_LINK = re.compile(r"\s*\[[^\]]*\]\([^)]*\)")  # the web form's "[🛈](url)
 
 
 def make(name):
-    """A generator with the app's defaults."""
+    """A generator with the app's defaults, and its spacing between parts in mm (2 by default)."""
     box = GENERATORS[name]()
+    for a in box.argparser._actions:
+        if a.dest == "spacing":  # boxes.py's: thicknesses [: extra mm]
+            a.type, a.default, a.help = spacing_mm, "2", "space between parts in mm"
     box.argparser.set_defaults(**DEFAULTS.get(name, {}))
     return box
+
+
+def spacing_mm(value):
+    """The spacing as boxes.py takes it: no thicknesses, the mm extra (the burn is added to it)."""
+    return 0.0, float(value)
 
 
 def tr(text):
@@ -84,13 +92,97 @@ def list_generators():
         for g in [*boxes.generators.ui_groups, TESTS] if by_group.get(g.name)]}
 
 
-def label(action, prefix):
+# Words for boxes.py's short parameter names (x, h, sx…), by what their help says they are there
+# ("h" is mostly the height, the depth for a ramp); "*": whatever the help.
+PARAMETER_NAMES = {
+    ('ah', 'air hole sections bottom to top in mm'): 'air holes, bottom to top',
+    ('aw', 'air hole slot width in mm'): 'air hole width',
+    ('ax', 'air hole sections left to right in %% of the box width'): 'air holes, left to right',
+    ('ay', 'air hole sections back to front in %% of the box depth'): 'air holes, back to front',
+    ('d', 'Diameter of top hole [mm]'): 'top hole diameter',
+    ('d', 'bin (d)epth'): 'bin depth',
+    ('d', 'clearance of the lid'): 'lid clearance',
+    ('d1', 'Diameter of the inner lid screw holes in mm'): 'inner lid screw holes',
+    ('d2', 'Diameter of the lid screw holes in mm'): 'lid screw holes',
+    ('d3', 'Diameter of the mounting screw holes in mm'): 'mounting screw holes',
+    ('eye', 'radius of the eye (multiples of thickness)'): 'eye radius',
+    ('fw', 'distance of flex cuts in multiples of thickness'): 'flex cut distance',
+    ('gap', 'the gap between grooves (fraction of the edge length)'): 'groove gap',
+    ('gh', 'height of the grip hole in mm'): 'grip hole height',
+    ('gw', 'width of th grip hole in mm (zero for no hole)'): 'grip hole width',
+    ('h', 'Height of the matrix'): 'height',
+    ('h', 'depth (with walls if outside is selected) in mm'): 'depth',
+    ('h', 'depth of the ramp in mm, will influence the steepness of the ramp'): 'depth',
+    ('h', "height in mm or add 'u' at the end for Gridfinity units"): 'height',
+    ('h', 'height of sidewalls of the tray (mm)'): 'side wall height',
+    ('h', 'height of the box'): 'height',
+    ('h', 'height of the front plate (in mm) - needs to be at least 7 time the thickness'): 'front plate height',
+    ('h', 'height of the lid'): 'lid height',
+    ('h', 'height separation walls in mm'): 'separator height',
+    ('h', 'inner height in mm'): 'height',
+    ('h', 'inner height in mm (unless outside selected)'): 'height',
+    ('hi', '*'): 'inner walls height',
+    ('hp', 'Width of the case in HP'): 'width (HP)',
+    ('id', 'add identifier etching to each piece'): 'identifier',
+    ('m', 'Extra margin around the gridfinity base to allow it to drop into the carrier (mm)'): 'margin',
+    ('n', 'Number of reinforcement triangle inside'): 'reinforcements',
+    ('n', 'number of lights'): 'lights',
+    ('n', 'number of sides'): 'sides',
+    ('n', 'number of sides on the lid. n ≥ 3'): 'sides',
+    ('n', 'number of walls at one side (1+)'): 'walls',
+    ('num', 'number of holdfasts'): 'holdfasts',
+    ('num', 'number of mounting holes (integer)'): 'mounting holes',
+    ('num', 'number of shelves'): 'shelves',
+    ('num', 'number of soles'): 'soles',
+    ('nx', 'Number of holes in width (X).'): 'holes across',
+    ('nx', 'number of gridfinity grids in X direction'): 'grids across',
+    ('ny', 'Number of holes in depth (Y).'): 'holes in depth',
+    ('ny', 'number of gridfinity grids in Y direction'): 'grids in depth',
+    ('pin', 'diameter of the pin in mm'): 'pin diameter',
+    ('r', 'radius of the corners'): 'corner radius',
+    ('rim', 'rim around the filter holding it in place (in mm)'): 'rim',
+    ('sh', 'sections bottom to top in mm'): 'section heights',
+    ('sx', 'sections left to right in mm'): 'compartment widths',
+    ('sy', 'sections back to front in mm'): 'compartment depths',
+    ('top', 'overlap of top rim (zero for none)'): 'top rim',
+    ('top', 'style of the top and lid'): 'top style',
+    ('x', 'Width of the photo, not including any border'): 'photo width',
+    ('x', 'X dimension of tray/box that this fits into'): 'tray width',
+    ('x', 'inner width in mm'): 'width',
+    ('x', 'inner width in mm (unless outside selected)'): 'width',
+    ('x', 'number of grids in X direction (0=auto)'): 'grids across',
+    ('x', 'outer width of the most outer layer'): 'width',
+    ('x', 'width of the ramp in mm, generally the width of the step the ramp is built for'): 'width',
+    ('y', 'Height of the photo, not including any border'): 'photo height',
+    ('y', 'Y dimension of tray/box that this fits into'): 'tray depth',
+    ('y', 'height of the ramp in mm'): 'height',
+    ('y', 'inner depth in mm'): 'depth',
+    ('y', 'inner depth in mm (unless outside selected)'): 'depth',
+    ('y', 'number of grids in Y direction (0=auto)'): 'grids in depth',
+    ('y', 'outer width of the most outer layer'): 'depth',
+    ('z', 'depth of the shorter (rackear) side'): 'rear depth',
+    ('z', 'height of the box'): 'height',
+    ('z', 'inner depth in mm'): 'depth',
+    ("width", "Width of linkages"): "link width",
+    ("width", "width of sole stripe"): "sole strip width",
+    ("height", "height of the body"): "body height",
+    # by generator: a Z beam's walls (two flanges, the web between) and its length
+    ("ZBeam", "x"): "first flange", ("ZBeam", "y"): "web", ("ZBeam", "z"): "second flange", ("ZBeam", "h"): "length",
+}
+
+
+def label(action, prefix, generator=""):
     name = action.dest
-    return tr(name[len(prefix) + 1:] if prefix and name.startswith(prefix + "_") else name)
+    name = name[len(prefix) + 1:] if prefix and name.startswith(prefix + "_") else name
+    help_ = INFO_LINK.sub("", action.help or "").strip()
+    if words := (PARAMETER_NAMES.get((generator, name)) or PARAMETER_NAMES.get((name, help_))
+                 or PARAMETER_NAMES.get((name, "*"))):
+        return TRANSLATIONS.pgettext("parameter", words)
+    return tr(name)
 
 
-def describe(action, prefix):
-    arg = {"name": action.dest, "label": label(action, prefix), "help": INFO_LINK.sub("", tr(action.help)).strip(),
+def describe(action, prefix, generator):
+    arg = {"name": action.dest, "label": label(action, prefix, generator), "help": INFO_LINK.sub("", tr(action.help)).strip(),
            "default": str(action.default)}
     if isinstance(action.type, boxes.BoolArg):
         arg.update(kind="bool", default="1" if action.default else "0")
@@ -111,7 +203,7 @@ def generator_args(name):
     box = make(name)
     groups = []
     for group in box.argparser._action_groups:
-        args = [describe(a, getattr(group, "prefix", None)) for a in group._group_actions if a.dest not in SKIPPED]
+        args = [describe(a, getattr(group, "prefix", None), name) for a in group._group_actions if a.dest not in SKIPPED]
         if args:
             groups.append({"title": tr(group.title), "args": args, "advanced": group.title.startswith("Settings for")})
     # The generator's own settings first, then the defaults, then the edge settings.
@@ -435,7 +527,7 @@ def translate_error(message, box):
     if m := re.match(r"argument --(\w+): invalid .*?: '(.*)'", message):
         action = next((a for a in box.argparser._actions if a.dest == m[1]), None)
         group = next((g for g in box.argparser._action_groups if action in g._group_actions), None)
-        name = label(action, getattr(group, "prefix", None)) if action else m[1]
+        name = label(action, getattr(group, "prefix", None), type(box).__name__) if action else m[1]
         return _("Invalid value for “{label}”: {value}").replace("{label}", name).replace("{value}", m[2])
     for template, translated in TRANSLATIONS._catalog.items() if hasattr(TRANSLATIONS, "_catalog") else ():
         placeholders = re.findall(r"\{[^}]*\}", template) if isinstance(template, str) else []
@@ -514,13 +606,19 @@ if __name__ == "__main__":
         w, h = map(float, re.search(r'viewBox="[\d.]+ [\d.]+ ([\d.]+) ([\d.]+)"', render("UniversalBox", {}, "svg")).groups())
         assert 1.3 < w / h < 1.7, (w, h)  # five squares drawn 2 × 3 upright, packed 3 × 2 across
         assert ">lid front<" in render("HingeBox", {}, "svg")  # unlabelled pieces named from the 3D view
+        labels = {a["name"]: a["label"] for g in spec["groups"] for a in g["args"]}
+        assert (labels["x"], labels["h"], labels["spacing"]) == ("width", "height", "spacing"), labels
+        box = make("UniversalBox")
+        configure(box, {})
+        box.open()
+        assert abs(box.spacing - (2 + 2 * box.burn)) < 1e-9, box.spacing  # 2 mm apart
         dxf = svg_to_dxf(svg)
         assert dxf.count("\nLINE\n") > 50 and dxf.endswith("EOF\n")
         try:
             render("UniversalBox", {"x": "abc"}, "svg")
             raise AssertionError("bad value accepted")
         except ValueError as e:
-            assert "“x”" in str(e), e
+            assert "“width”" in str(e), e
         assert "<path" in render("TrayLayout", {}, "svg")
         print("ok")
     else:

@@ -13462,3 +13462,356 @@ msgstr ""
 msgctxt "piece"
 msgid  "lid right side"
 msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "air holes, bottom to top"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "air hole width"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "air holes, left to right"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "air holes, back to front"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "top hole diameter"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "bin depth"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "lid clearance"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "inner lid screw holes"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "lid screw holes"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "mounting screw holes"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "eye radius"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "flex cut distance"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "groove gap"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "grip hole height"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "grip hole width"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "height"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "depth"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "side wall height"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "front plate height"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "lid height"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "separator height"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "inner walls height"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "width (HP)"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "identifier"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "margin"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "reinforcements"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "lights"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "sides"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "walls"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "holdfasts"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "mounting holes"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "shelves"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "soles"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "holes across"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "grids across"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "holes in depth"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "grids in depth"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "pin diameter"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "corner radius"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "rim"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "section heights"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "compartment widths"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "compartment depths"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "top rim"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "top style"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "photo width"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "tray width"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "width"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "photo height"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "tray depth"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "rear depth"
+msgstr ""
+
+#. help of the spacing setting, which the app takes in mm
+#: LaserBox/bridge.py
+msgid  "space between parts in mm"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "link width"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "sole strip width"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "body height"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "first flange"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "web"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "second flange"
+msgstr ""
+
+#. short name of a parameter (x, h, sx…), shown as its label
+#: LaserBox/bridge.py
+msgctxt "parameter"
+msgid  "length"
+msgstr ""
