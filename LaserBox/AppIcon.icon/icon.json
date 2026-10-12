@@ -1,68 +1,68 @@
 {
-  "fill": {
-    "automatic-gradient": "display-p3:0.11000,0.12000,0.18000,1.00000"
-  },
-  "fill-specializations": [
-    {
-      "appearance": "dark",
-      "value": {
-        "automatic-gradient": "display-p3:0.05000,0.05000,0.09000,1.00000"
-      }
-    }
+  "features" : [
+    "refractivity"
   ],
-  "groups": [
+  "fill" : {
+    "automatic-gradient" : "display-p3:0.11000,0.12000,0.18000,1.00000"
+  },
+  "groups" : [
     {
-      "layers": [
+      "layers" : [
         {
-          "fill": {
-            "solid": "display-p3:1.00000,0.36000,0.22000,1.00000"
+          "fill" : {
+            "solid" : "display-p3:1.00000,0.36000,0.22000,1.00000"
           },
-          "glass": true,
-          "image-name": "beam.svg",
-          "name": "beam"
+          "glass" : true,
+          "image-name" : "beam.svg",
+          "name" : "beam"
         },
         {
-          "fill": {
-            "solid": "display-p3:1.00000,0.36000,0.22000,0.30000"
+          "fill" : {
+            "solid" : "display-p3:1.00000,0.36000,0.22000,0.30000"
           },
-          "image-name": "glow.svg",
-          "name": "glow"
+          "image-name" : "glow.svg",
+          "name" : "glow"
         }
       ],
-      "shadow": {
-        "kind": "layer-color",
-        "opacity": 0.6
+      "shadow" : {
+        "kind" : "layer-color",
+        "opacity" : 0.6
       },
-      "specular": true,
-      "translucency": {
-        "enabled": false,
-        "value": 0.5
+      "specular" : true,
+      "translucency" : {
+        "enabled" : false,
+        "value" : 0.5
       }
     },
     {
-      "layers": [
+      "layers" : [
         {
-          "fill": {
-            "solid": "extended-gray:1.00000,1.00000"
+          "fill" : {
+            "solid" : "extended-gray:1.00000,1.00000"
           },
-          "glass": true,
-          "image-name": "box.svg",
-          "name": "box"
+          "glass" : true,
+          "image-name" : "box.svg",
+          "name" : "box"
         }
       ],
-      "shadow": {
-        "kind": "neutral",
-        "opacity": 0.5
+      "refractivity" : {
+        "depth" : 0,
+        "enabled" : true,
+        "strength" : 0.5
       },
-      "specular": true,
-      "translucency": {
-        "enabled": true,
-        "value": 0.3
+      "shadow" : {
+        "kind" : "layer-color",
+        "opacity" : 0.5
+      },
+      "specular" : true,
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.3
       }
     }
   ],
-  "supported-platforms": {
-    "squares": [
+  "supported-platforms" : {
+    "squares" : [
       "macOS"
     ]
   }
