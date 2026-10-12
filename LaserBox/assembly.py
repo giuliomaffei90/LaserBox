@@ -14,10 +14,12 @@ not cut (notes, dice…) have none.
 import math
 import re
 import shlex
+import sys
 from types import SimpleNamespace
 
 from affine import Affine
 from shapely import set_precision
+from shapely.affinity import affine_transform
 from shapely.geometry import LineString, Point, Polygon, box as rect
 from shapely.geometry.polygon import orient
 from shapely.ops import unary_union
@@ -43,6 +45,17 @@ class Record:
         self.matrix = None   # ctx matrix at the first cc(): the start of the first edge
         self.base_v = 0.0    # the edge is drawn startwidth below the part's base line (its inner face)
         self.flex = []       # (matrix at the flex call, length)
+        self.caller = None   # the generator's own method that drew it ("roof_tile"): what it is
+
+
+def _caller(box):
+    """The innermost method of the generator (not of boxes.py) on the stack, drawing for box."""
+    f = sys._getframe(2)
+    while f is not None:
+        if "generators" in f.f_code.co_filename and f.f_locals.get("self") is box:
+            return f.f_code.co_name
+        f = f.f_back
+    return None
 
 
 def install():
@@ -59,6 +72,7 @@ def install():
         stack = RECORDS["stack"]
         if before:
             stack.append(Record(RECORDS["pending"]))
+            stack[-1].caller = _caller(self)
             RECORDS["current"] = stack[-1]
             RECORDS["all"].append(stack[-1])
             RECORDS["pending"] = {}
@@ -4225,13 +4239,15 @@ def FlexTest2(box, parts):
 
 # ---------------------------------------------------------------- driver
 
-def assemble(box):
-    """Runs the generator with the recording hooks and returns the placed pieces."""
+def start():
+    """Before drawing a box whose parts are to be placed: the hooks in, the records cleared."""
     install()
     RECORDS.update(all=[], current=None, pending={}, walls=None, stack=[], border=None)
-    box.open()
-    box.render()
-    box.ctx.stroke()  # the last path drawn (a fan's swirl) is stroked only by close()
+
+
+def placed(box):
+    """The parts of a drawn box (drawn after start()) by its recipe: ([(n, placement, polygons in
+    the part's local frame, the sheet → local matrix)], number of parts drawn)."""
     merged = {}  # one part per record: a part interrupted by a nested one continues in a new one
     for p in box.ctx._dwg.parts:
         if p.pathes and getattr(p, "record", None) is not None:
@@ -4240,14 +4256,14 @@ def assemble(box):
     recipe_fn = RECIPES.get(type(box).__name__)
     if recipe_fn is None:
         raise ValueError(f"No 3D assembly for {type(box).__name__} yet")
-    placed = recipe_fn(box, parts)
-    pieces = []
-    if isinstance(placed, dict):
-        items = [(p, placed.get(p.record.label)) for p in parts]
-    elif placed and isinstance(placed[0], tuple):
-        items = placed
+    placed_ = recipe_fn(box, parts)
+    if isinstance(placed_, dict):
+        items = [(p, placed_.get(p.record.label)) for p in parts]
+    elif placed_ and isinstance(placed_[0], tuple):
+        items = placed_
     else:
-        items = list(zip(parts, placed))
+        items = list(zip(parts, placed_))
+    out = []
     for n, item in enumerate(items):
         part, placement = item[0], item[1]
         if placement is None:
@@ -4259,11 +4275,68 @@ def assemble(box):
         if placement.plate is not None:  # only holes: one left open (a fan's swirl arm, by 0.34) is a hole too
             loops += [c for c in cuts if len(c) > 2 and math.dist(c[0], c[-1]) < 1]
             cuts = [c for c in cuts if not (len(c) > 2 and math.dist(c[0], c[-1]) < 1)]
-        polys = polygons_of(loops, cuts)
+        out.append((n, placement, polygons_of(loops, cuts), matrix))
+    return out, len(parts)
+
+
+def assemble(box):
+    """Runs the generator with the recording hooks and returns the placed pieces."""
+    start()
+    box.open()
+    box.render()
+    box.ctx.stroke()  # the last path drawn (a fan's swirl) is stroked only by close()
+    items, count = placed(box)
+    pieces = []
+    for n, placement, polys, _ in items:
         pieces += [dict(p, part=n) for p in placement.pieces(polys, box.thickness)]
     name = type(box).__name__
     for fn in DECORATIONS.get(name, []):
         pieces += fn(box)
     if name in WALLS:
         pieces += pegboard(pieces, WALLS[name](box))
-    return {"pieces": pieces, "count": len(parts), "turn": TURN.get(name, 0), "galleryLids": name in GALLERY_LIDS}
+    return {"pieces": pieces, "count": count, "turn": TURN.get(name, 0), "galleryLids": name in GALLERY_LIDS}
+
+
+def piece_roles(box):
+    """What each placed piece of a drawn box (drawn after start()) is, from where its recipe puts
+    it: [(its outline on the sheet, role)]. Roles: bottom, top, lid, front, back, left side, right
+    side, side (upright, at an angle), divider (upright inside), shelf (level inside), sloped panel,
+    flex wall (bent); a lid's walls: lid front, lid back, lid left side, lid right side, lid side.
+    Front is towards the viewer (after TURN)."""
+    found = []
+    for n, placement, polys, matrix in placed(box)[0]:
+        if placement.decoration or placement.plate is not None:
+            continue
+        for poly in polys:
+            if placement.keep and not placement.keep(poly):
+                continue
+            pieces = placement.pieces([poly], box.thickness)
+            if pieces:
+                found.append((affine_transform(poly, (~matrix).to_shapely()), placement, pieces))
+    if not found:
+        return []
+    lo, hi = _extent([p for _, _, ps in found for p in ps])
+    edge = 2 * box.thickness + 1
+    turned = TURN.get(type(box).__name__, 0) == 180
+    out = []
+    for sheet, placement, ps in found:
+        plo, phi = _extent(ps)
+        normals = {tuple(round(c * p["side"], 2) for c in _cross(p["u"], p["v"])) for p in ps}
+        nx, ny, nz = (abs(c) for c in next(iter(normals)))
+        if len(normals) > 1:
+            role = "flex wall"
+        elif nz > 0.9:
+            role = ("lid" if placement.lid else "bottom" if plo[2] <= lo[2] + edge else
+                    "top" if phi[2] >= hi[2] - edge else "shelf")
+        elif ny > 0.9:
+            role = "front" if plo[1] <= lo[1] + edge else "back" if phi[1] >= hi[1] - edge else "divider"
+            role = {"front": "back", "back": "front"}.get(role, role) if turned else role
+        elif nx > 0.9:
+            role = "left side" if plo[0] <= lo[0] + edge else "right side" if phi[0] >= hi[0] - edge else "divider"
+            role = {"left side": "right side", "right side": "left side"}.get(role, role) if turned else role
+        else:
+            role = "side" if nz < 0.1 else "sloped panel"
+        if placement.lid and role in ("front", "back", "left side", "right side", "side", "divider"):
+            role = "lid side" if role in ("side", "divider") else "lid " + role  # the lid's own walls
+        out.append((sheet, role))
+    return out

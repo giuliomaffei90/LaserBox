@@ -15204,7 +15204,434 @@ msgstr "Test"
 msgid "Pieces for trying out the laser settings"
 msgstr "Pezzi per provare le impostazioni del laser"
 
-#. label put on a cut piece that has none, followed by its number ("part 3")
+#. name of a cut piece, written on it when the generator gives none
 #: LaserBox/bridge.py
-msgid "part"
+msgctxt "piece"
+msgid "PCB clamp"
+msgstr "morsetto PCB"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "ankle"
+msgstr "caviglia"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "back"
+msgstr "retro"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "back plate"
+msgstr "piastra posteriore"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "balcony wall"
+msgstr "parete del balcone"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "base plate"
+msgstr "piastra di base"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "bottom"
+msgstr "fondo"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "bottom part"
+msgstr "parte inferiore"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "bottom support"
+msgstr "supporto inferiore"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "brace"
+msgstr "rinforzo"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "card tray"
+msgstr "vassoio per carte"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "comb"
+msgstr "pettine"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "cross beam"
+msgstr "traversa"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "die"
+msgstr "dado"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "divider"
+msgstr "divisorio"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "flex wall"
+msgstr "parete flessibile"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "foot"
+msgstr "piede"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "fork"
+msgstr "forcella"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "frame"
+msgstr "telaio"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "front"
+msgstr "fronte"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "front plate"
+msgstr "piastra frontale"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "handle"
+msgstr "maniglia"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "heddle"
+msgstr "liccio"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "inner rib"
+msgstr "nervatura interna"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "inner wall"
+msgstr "parete interna"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "latch"
+msgstr "chiavistello"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "latch bracket"
+msgstr "staffa della chiusura"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "latch pin"
+msgstr "perno della chiusura"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "latch wall"
+msgstr "parete della chiusura"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "layer"
+msgstr "strato"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "left side"
+msgstr "fianco sinistro"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "lid"
+msgstr "coperchio"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "lid lip"
+msgstr "bordo del coperchio"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "lid side"
+msgstr "fianco del coperchio"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "link"
+msgstr "asta"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "lock"
+msgstr "blocco"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "lock part"
+msgstr "parte del blocco"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "lock pin"
+msgstr "perno di blocco"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "middle wall"
+msgstr "parete centrale"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "moor box"
+msgstr "scatola delle brughiere"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "needle"
+msgstr "ago"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "outer wall"
+msgstr "parete esterna"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "panel"
+msgstr "pannello"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "panel side"
+msgstr "fianco del pannello"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "piece"
 msgstr "pezzo"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "plate"
+msgstr "piastra"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "player box"
+msgstr "scatola del giocatore"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "rail"
+msgstr "guida"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "recessed wall"
+msgstr "parete incassata"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "right side"
+msgstr "fianco destro"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "roof"
+msgstr "tetto"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "roof tile"
+msgstr "tegola"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "room box"
+msgstr "scatola delle stanze"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "separator"
+msgstr "separatore"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "shelf"
+msgstr "ripiano"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "shuttle"
+msgstr "navetta"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "side"
+msgstr "fianco"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "side holder"
+msgstr "supporto laterale"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "side plate"
+msgstr "piastra laterale"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "sloped panel"
+msgstr "pannello inclinato"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "support"
+msgstr "supporto"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "support wall"
+msgstr "parete di supporto"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "top"
+msgstr "coperchio"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "top stabilizer"
+msgstr "stabilizzatore superiore"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "tray"
+msgstr "vassoio"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "tray divider"
+msgstr "divisorio del vassoio"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "triangle"
+msgstr "triangolo"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "wall"
+msgstr "parete"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "lid back"
+msgstr "retro del coperchio"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "lid front"
+msgstr "fronte del coperchio"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "lid left side"
+msgstr "fianco sinistro del coperchio"
+
+#. name of a cut piece, written on it when the generator gives none
+#: LaserBox/bridge.py
+msgctxt "piece"
+msgid "lid right side"
+msgstr "fianco destro del coperchio"

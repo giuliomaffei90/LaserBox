@@ -139,11 +139,16 @@ def render(name, args, fmt):
     box.translations = TRANSLATIONS
     try:
         configure(box, args)
+        assembly.start()  # the parts recorded as the 3D view does: what each piece is, for its label
         box.open()
         box.render()
         box.ctx.stroke()  # the last path, before the parts move (close() would stroke it after)
         drawn = part_groups(box.ctx._dwg.parts)
-        add_labels(drawn, box)
+        try:
+            roles = assembly.piece_roles(box) if name in assembly.RECIPES else []
+        except Exception:  # a recipe that can't place these settings: no names from the 3D view
+            roles = []
+        add_labels(drawn, box, roles)
         pack(drawn, box.spacing)
         upright_labels(box.ctx._dwg.parts)
     except Exception as e:
@@ -280,23 +285,88 @@ def _label_spot(free, text, angle, sizes):
     return None
 
 
-def add_labels(groups_, box):
+# What a piece is, by the generator's method that drew it: a name, or (generic) a name to use only
+# when the 3D view says nothing better. Other methods (render, cornerRadius…) say nothing.
+CALLER_NAMES = {
+    "PCB_Clamp": "PCB clamp", "ankles": "ankle", "balcony_wall": "balcony wall", "basePlate": "base plate",
+    "bottomPart": "bottom part", "brace": "brace", "comb": "comb", "dice": "die", "drawTop": "top",
+    "flexBookLatchBracket": "latch bracket", "flexBookLatchPin": "latch pin", "flexBookLatchWall": "latch wall",
+    "flexBookRecessedWall": "recessed wall", "foot": "foot", "fork": "fork", "frame": "frame", "front": "front",
+    "generate_shelves": "shelf", "heddle": "heddle", "innerRibs": "inner rib", "innerWall": "inner wall",
+    "laptopstand_triangles": "triangle", "latch": "latch", "layer": "layer", "lidSide": "lid side",
+    "lid_lip": "lid lip", "link": "link", "lock": "lock", "lockPin": "lock pin", "lock_part": "lock part",
+    "middleWall": "middle wall", "needle": "needle", "outerWall": "outer wall", "panel_cross_beam": "cross beam",
+    "panel_side": "panel side", "railSet": "rail", "render_back_plate": "back plate",
+    "render_bottom_support": "bottom support", "render_card_divider_tray": "card tray",
+    "render_front_plate": "front plate", "render_moor_box": "moor box", "render_plate": "plate",
+    "render_player_box": "player box", "render_room_box": "room box", "render_side_plate": "side plate",
+    "render_simple_tray": "tray", "render_simple_tray_divider": "tray divider", "roof": "roof",
+    "roof_tile": "roof tile", "seven_segment_separators": "separator", "shuttle": "shuttle",
+    "sideHolders": "side holder", "support": "support", "supportWall": "support wall", "topHandle": "handle",
+    "topStabilizers": "top stabilizer",
+}
+GENERIC_CALLER_NAMES = {
+    "side": "side", "side2": "side", "sideWall": "side", "sidewall": "side", "flexBoxSide": "side",
+    "flexBookSide": "side", "wall": "wall", "xWall": "wall", "yWall": "wall", "xOutsideWall": "wall",
+    "surroundingWall": "flex wall",
+}
+
+
+def piece(name):
+    return TRANSLATIONS.pgettext("piece", name)
+
+
+def _piece_name(q, g, roles, alone, box):
+    """A name for the drawn piece q of the group g: its method's, else its 3D role (roles: from
+    assembly.piece_roles), else the generic method's, else the generator's when it is the only
+    piece, else "panel w×h" (a wall's inner size) or "piece w×h"."""
+    inside = [p for p in g if getattr(p, "record", None) and _contains(p.extents(), q.representative_point())]
+    record = min(inside, key=lambda p: p.extents().width * p.extents().height).record if inside else None
+    caller = record.caller if record else None
+    if caller in CALLER_NAMES:
+        return piece(CALLER_NAMES[caller])
+    match = [(r.intersection(q).area / r.union(q).area, role) for r, role in roles if r.intersects(q)]
+    if match and max(match)[0] > 0.6:
+        return piece(max(match)[1])
+    if caller in GENERIC_CALLER_NAMES:
+        return piece(GENERIC_CALLER_NAMES[caller])
+    if alone:
+        return tr(type(box).__name__)
+    if record and record.primitive == "rectangularWall" and len(record.args) >= 2:
+        try:
+            return f"{piece('panel')} {float(record.args[0]):.4g}×{float(record.args[1]):.4g}"
+        except (TypeError, ValueError):
+            pass
+    x0, y0, x1, y1 = q.bounds
+    return f"{piece('piece')} {x1 - x0:.0f}×{y1 - y0:.0f}"
+
+
+def _contains(e, point):
+    return e.xmin - 0.01 <= point.x <= e.xmax + 0.01 and e.ymin - 0.01 <= point.y <= e.ymax + 0.01
+
+
+def _pieces(g):
+    """The pieces cut from a group of drawn parts: the outlines cut in black (what is cut in blue,
+    holes, falls out), in sheet coordinates."""
+    pathes = [p for part in g for p in part.pathes]
+    cuts = []
+    pieces = assembly.polygons_of(assembly.loops_of(SimpleNamespace(pathes=pathes), Affine.identity(), cuts), cuts)
+    outer = unary_union([LineString(l + l[:1]) for l in assembly.loops_of(
+        SimpleNamespace(pathes=[p for p in pathes if assembly._is_black(p.params.get("rgb"))]), Affine.identity())])
+    return [q for q in pieces if q.exterior.distance(outer) < 0.3 and
+            outer.distance(q.exterior.interpolate(0.5, normalized=True)) < 0.3]
+
+
+def add_labels(groups_, box, roles=()):
     """A label on every piece: boxes.py's (red text) kept where it lies clear of the cuts, moved to
-    a clear spot (smaller if need be) where it doesn't, and "part n" on the pieces without one;
-    none on a piece too small for it. Pieces are the outlines cut in black: what is cut in blue
-    (holes) falls out."""
+    a clear spot (smaller if need be) where it doesn't, and a name (see _piece_name) on the pieces
+    without one; none on a piece too small for it."""
     if not box.labels:
         return
-    n = 0
-    for g in groups_:
+    cut = [_pieces(g) for g in groups_]
+    alone = sum(map(len, cut)) == 1
+    for g, pieces in zip(groups_, cut):
         pathes = [p for part in g for p in part.pathes]
-        drawing = SimpleNamespace(pathes=pathes)
-        cuts = []
-        pieces = assembly.polygons_of(assembly.loops_of(drawing, Affine.identity(), cuts), cuts)
-        outer = unary_union([LineString(l + l[:1]) for l in assembly.loops_of(
-            SimpleNamespace(pathes=[p for p in pathes if assembly._is_black(p.params.get("rgb"))]), Affine.identity())])
-        pieces = [q for q in pieces if q.exterior.distance(outer) < 0.3 and
-                  outer.distance(q.exterior.interpolate(0.5, normalized=True)) < 0.3]
         texts = [(c, p) for p in pathes for c in p.path
                  if c[0] == "T" and c[5]["rgb"] == boxes.Color.ANNOTATIONS and c[4].strip()]
         mine = {id(q): [] for q in pieces}
@@ -334,9 +404,8 @@ def add_labels(groups_, box):
             free = clear(q)
             if not mine[id(q)] and not free.is_empty:
                 w, h = q.bounds[2] - q.bounds[0], q.bounds[3] - q.bounds[1]
-                text = f"{_('part')} {n + 1}"
+                text = _piece_name(q, g, roles, alone, box)
                 if spot := _label_spot(free, text, 0 if w >= h else 90, LABEL_SIZES):
-                    n += 1
                     m, fs = spot
                     new.append(["T", m.c, m.f, m, text, {"ff": ("sans-serif", False, False), "fs": fs, "lw": 0,
                                                          "rgb": boxes.Color.ANNOTATIONS, "align": "middle"}])
@@ -444,6 +513,7 @@ if __name__ == "__main__":
         assert "burn:" not in render("UniversalBox", {"reference": "100", "qr_code": "1"}, "svg")  # no reference
         w, h = map(float, re.search(r'viewBox="[\d.]+ [\d.]+ ([\d.]+) ([\d.]+)"', render("UniversalBox", {}, "svg")).groups())
         assert 1.3 < w / h < 1.7, (w, h)  # five squares drawn 2 × 3 upright, packed 3 × 2 across
+        assert ">lid front<" in render("HingeBox", {}, "svg")  # unlabelled pieces named from the 3D view
         dxf = svg_to_dxf(svg)
         assert dxf.count("\nLINE\n") > 50 and dxf.endswith("EOF\n")
         try:
