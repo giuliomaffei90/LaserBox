@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import Observation
 
 @Observable @MainActor
@@ -23,6 +23,8 @@ final class BoxModel {
     var startupError: String?
     /// Assembled boxes with default parameters, for the gallery cards.
     var galleryAssemblies: [String: Assembly] = [:]
+    /// The gallery cards' pictures of them (see GalleryPictures).
+    var galleryPictures: [String: NSImage] = [:]
 
     /// Values the user changed, per generator, so switching box type and back keeps them.
     private var overrides: [String: [String: String]] = [:]
@@ -64,6 +66,17 @@ final class BoxModel {
         if let assembly = try? await bridge.assemble(name, args: [:]) {
             galleryAssemblies[name] = assembly
         }
+    }
+
+    func loadGalleryPicture(_ name: String) async {
+        guard galleryPictures[name] == nil else { return }
+        if let picture = await GalleryPictures.shared.cached(name) {
+            galleryPictures[name] = picture
+            return
+        }
+        await loadGalleryAssembly(name)
+        guard let assembly = galleryAssemblies[name] else { return }
+        galleryPictures[name] = await GalleryPictures.shared.render(name, assembly)
     }
 
     /// The cut file in the given format ("svg" or "dxf") for the current settings.
@@ -116,4 +129,42 @@ final class BoxModel {
             }
         }
     }
+}
+
+
+/// The gallery's 3D cards as pictures, rendered one at a time off the main thread and kept on disk
+/// for this build of the app: a live SceneKit view per card made scrolling stutter. A card turns
+/// live only while the pointer is on it.
+actor GalleryPictures {
+    static let shared = GalleryPictures()
+    private let folder: URL
+
+    init() {
+        let root = URL.cachesDirectory.appending(path: Bundle.main.bundleIdentifier ?? "LaserBox").appending(path: "Gallery")
+        // Another build may draw any box differently: its pictures go in a folder of their own.
+        let built = (try? Bundle.main.executableURL?.resourceValues(forKeys: [.contentModificationDateKey]))?
+            .contentModificationDate ?? .distantPast
+        let stamp = String(Int(built.timeIntervalSince1970))
+        folder = root.appending(path: stamp)
+        let files = FileManager.default
+        for old in (try? files.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? [] where old.lastPathComponent != stamp {
+            try? files.removeItem(at: old)
+        }
+        try? files.createDirectory(at: folder, withIntermediateDirectories: true)
+    }
+
+    func cached(_ name: String) -> NSImage? {
+        NSImage(contentsOf: file(name))
+    }
+
+    func render(_ name: String, _ assembly: Assembly) -> NSImage {
+        let picture = AssemblyStage.galleryPicture(of: assembly, pixels: 640)
+        if let tiff = picture.tiffRepresentation,
+           let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
+            try? png.write(to: file(name))
+        }
+        return picture
+    }
+
+    private func file(_ name: String) -> URL { folder.appending(path: name + ".png") }
 }

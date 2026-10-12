@@ -373,73 +373,46 @@ struct AssemblyView: NSViewRepresentable {
         view.autoenablesDefaultLighting = false
         view.antialiasingMode = .multisampling4X
         view.backgroundColor = .clear
-        view.scene = Self.makeScene(coordinator: context.coordinator)
+        view.scene = context.coordinator.scene
         view.pointOfView = context.coordinator.camera
         return view
     }
 
     func updateNSView(_ view: SCNView, context: Context) {
-        let c = context.coordinator
-        let shown = { (piece: Piece) in piece.lid == true ? lids : piece.decoration == nil || decorations }
+        let stage = context.coordinator
         // The editor builds every piece, framed on the whole box, and only hides lids and decorations,
         // so toggling them leaves the camera alone; the gallery leaves them out, framing what it shows.
         let key = interactive ? "\(key)|\(material.id)" : "\(key)|\(material.id)|\(decorations)|\(lids)"
-        if c.key != key {
-            c.key = key
-            c.spin.childNodes.forEach { $0.removeFromParentNode() }
-            c.optional = []
-            let box = SCNNode()
-            for piece in assembly.pieces where interactive || shown(piece) {
-                let node = Self.node(for: piece, material: material)
-                box.addChildNode(node)
-                if piece.lid == true || piece.decoration != nil { c.optional.append((node, piece)) }
-            }
-            let (minV, maxV) = box.boundingBox
-            box.position = SCNVector3(-(minV.x + maxV.x) / 2, -(minV.y + maxV.y) / 2, -(minV.z + maxV.z) / 2)
-            let tilt = SCNNode()           // boxes.py is z-up, SceneKit y-up
-            tilt.eulerAngles.x = -.pi / 2
-            tilt.addChildNode(box)
-            c.spin.addChildNode(tilt)
-            let dx = maxV.x - minV.x, dy = maxV.y - minV.y, dz = maxV.z - minV.z
-            let size = sqrt(dx * dx + dy * dy + dz * dz)   // the diagonal: fits from any angle
-            if abs(size - c.size) > 0.5 || !interactive {
-                c.size = size
-                c.frame(size: size, interactive: interactive)
-                view.pointOfView = c.camera
+        if stage.key != key {
+            stage.key = key
+            let size = stage.build(assembly, material: material, decorations: decorations, lids: lids, all: interactive)
+            if abs(size - stage.size) > 0.5 || !interactive {
+                stage.size = size
+                stage.frame(size: size, interactive: interactive)
+                view.pointOfView = stage.camera
             }
         }
-        for (node, piece) in c.optional { node.isHidden = !shown(piece) }
-        c.spin.eulerAngles = SCNVector3(pitch, yaw, 0)
+        stage.show(decorations: decorations, lids: lids)
+        stage.spin.eulerAngles = SCNVector3(pitch, yaw, 0)
     }
 
-    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeCoordinator() -> AssemblyStage { AssemblyStage() }
+}
 
-    final class Coordinator {
-        var key = ""
-        var optional: [(node: SCNNode, piece: Piece)] = []  // lids and decorations, shown or hidden
-        var size: CGFloat = 0
-        let spin = SCNNode()
-        let camera = SCNNode()
-        let sun = SCNNode()
+/// An assembled box's scene: lights, camera and the pieces under `spin`. It has nothing to do with
+/// the interface, so the gallery builds and renders its pictures off the main thread.
+final class AssemblyStage {
+    var key = ""
+    var optional: [(node: SCNNode, piece: Piece)] = []  // lids and decorations, shown or hidden
+    var size: CGFloat = 0
+    let scene = SCNScene()
+    let spin = SCNNode()
+    let camera = SCNNode()
+    let sun = SCNNode()
 
-        func frame(size: CGFloat, interactive: Bool) {
-            let cam = camera.camera!
-            cam.orthographicScale = Double(size) * (interactive ? 0.6 : 0.54)
-            camera.position = SCNVector3(size * 2, size * 1.5, size * 2)
-            camera.look(at: SCNVector3Zero)
-            cam.zFar = Double(size) * 20
-            cam.screenSpaceAmbientOcclusionRadius = Double(size) * 0.05
-            let light = sun.light!
-            light.orthographicScale = Double(size) * 1.2
-            light.zNear = 1; light.zFar = Double(size) * 8   // the shadow map must reach the whole box
-            sun.position = SCNVector3(size * 0.9, size * 2.2, size * 1.4)
-            sun.look(at: SCNVector3Zero)
-        }
-    }
-
-    private static func makeScene(coordinator c: Coordinator) -> SCNScene {
-        let scene = SCNScene()
-        scene.rootNode.addChildNode(c.spin)
+    init() {
+        scene.background.contents = NSColor.clear
+        scene.rootNode.addChildNode(spin)
 
         let cam = SCNCamera()
         cam.usesOrthographicProjection = true
@@ -449,17 +422,17 @@ struct AssemblyView: NSViewRepresentable {
         cam.screenSpaceAmbientOcclusionBias = 0.3
         cam.screenSpaceAmbientOcclusionDepthThreshold = 2
         cam.screenSpaceAmbientOcclusionNormalThreshold = 0.1
-        c.camera.camera = cam
-        scene.rootNode.addChildNode(c.camera)
+        camera.camera = cam
+        scene.rootNode.addChildNode(camera)
 
-        let sun = SCNLight()
-        sun.type = .directional; sun.intensity = 850
-        sun.castsShadow = true; sun.shadowMode = .deferred; sun.shadowSampleCount = 32
-        sun.shadowMapSize = CGSize(width: 2048, height: 2048)
-        sun.shadowRadius = 5; sun.shadowColor = NSColor(white: 0, alpha: 0.55)
-        sun.automaticallyAdjustsShadowProjection = false
-        c.sun.light = sun
-        scene.rootNode.addChildNode(c.sun)
+        let light = SCNLight()
+        light.type = .directional; light.intensity = 850
+        light.castsShadow = true; light.shadowMode = .deferred; light.shadowSampleCount = 32
+        light.shadowMapSize = CGSize(width: 2048, height: 2048)
+        light.shadowRadius = 5; light.shadowColor = NSColor(white: 0, alpha: 0.55)
+        light.automaticallyAdjustsShadowProjection = false
+        sun.light = light
+        scene.rootNode.addChildNode(sun)
 
         let fill = SCNNode()
         fill.light = SCNLight(); fill.light!.type = .directional; fill.light!.intensity = 250
@@ -469,7 +442,62 @@ struct AssemblyView: NSViewRepresentable {
         let ambient = SCNNode()
         ambient.light = SCNLight(); ambient.light!.type = .ambient; ambient.light!.intensity = 330
         scene.rootNode.addChildNode(ambient)
-        return scene
+    }
+
+    /// Puts the assembly's pieces under `spin`, centred: all of them, or only those shown. Returns the
+    /// box's diagonal, which frames it from any angle.
+    func build(_ assembly: Assembly, material: SheetMaterial, decorations: Bool, lids: Bool, all: Bool) -> CGFloat {
+        spin.childNodes.forEach { $0.removeFromParentNode() }
+        optional = []
+        let box = SCNNode()
+        for piece in assembly.pieces where all || Self.shown(piece, decorations: decorations, lids: lids) {
+            let node = Self.node(for: piece, material: material)
+            box.addChildNode(node)
+            if piece.lid == true || piece.decoration != nil { optional.append((node, piece)) }
+        }
+        let (minV, maxV) = box.boundingBox
+        box.position = SCNVector3(-(minV.x + maxV.x) / 2, -(minV.y + maxV.y) / 2, -(minV.z + maxV.z) / 2)
+        let tilt = SCNNode()           // boxes.py is z-up, SceneKit y-up
+        tilt.eulerAngles.x = -.pi / 2
+        tilt.addChildNode(box)
+        spin.addChildNode(tilt)
+        let dx = maxV.x - minV.x, dy = maxV.y - minV.y, dz = maxV.z - minV.z
+        return sqrt(dx * dx + dy * dy + dz * dz)
+    }
+
+    func show(decorations: Bool, lids: Bool) {
+        for (node, piece) in optional { node.isHidden = !Self.shown(piece, decorations: decorations, lids: lids) }
+    }
+
+    static func shown(_ piece: Piece, decorations: Bool, lids: Bool) -> Bool {
+        piece.lid == true ? lids : piece.decoration == nil || decorations
+    }
+
+    func frame(size: CGFloat, interactive: Bool) {
+        let cam = camera.camera!
+        cam.orthographicScale = Double(size) * (interactive ? 0.6 : 0.54)
+        camera.position = SCNVector3(size * 2, size * 1.5, size * 2)
+        camera.look(at: SCNVector3Zero)
+        cam.zFar = Double(size) * 20
+        cam.screenSpaceAmbientOcclusionRadius = Double(size) * 0.05
+        let light = sun.light!
+        light.orthographicScale = Double(size) * 1.2
+        light.zNear = 1; light.zFar = Double(size) * 8   // the shadow map must reach the whole box
+        sun.position = SCNVector3(size * 0.9, size * 2.2, size * 1.4)
+        sun.look(at: SCNVector3Zero)
+    }
+
+    /// The gallery's picture of a box, as its live card shows it before it's turned: MDF, lids left
+    /// out unless the box asks for them, turned by the box's `turn`.
+    static func galleryPicture(of assembly: Assembly, pixels: CGFloat) -> NSImage {
+        let stage = AssemblyStage()
+        let size = stage.build(assembly, material: .standard, decorations: true, lids: assembly.galleryLids ?? false, all: false)
+        stage.frame(size: size, interactive: false)
+        stage.spin.eulerAngles = SCNVector3(0, (assembly.turn ?? 0) * .pi / 180, 0)
+        let renderer = SCNRenderer(device: MTLCreateSystemDefaultDevice(), options: nil)
+        renderer.scene = stage.scene
+        renderer.pointOfView = stage.camera
+        return renderer.snapshot(atTime: 0, with: CGSize(width: pixels, height: pixels), antialiasingMode: .multisampling4X)
     }
 
     /// Decoration kinds (assembly.py) and their look.
@@ -487,7 +515,7 @@ struct AssemblyView: NSViewRepresentable {
     ]
 
     /// SCNShape extrudes a flat path along z, centred; the path's even-odd rule turns inner rings into holes.
-    private static func node(for piece: Piece, material: SheetMaterial) -> SCNNode {
+    static func node(for piece: Piece, material: SheetMaterial) -> SCNNode {
         let path = NSBezierPath()
         path.windingRule = .evenOdd
         for ring in piece.rings where ring.count >= 3 {
