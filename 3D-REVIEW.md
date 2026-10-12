@@ -102,4 +102,4 @@ decorazioni e l'esploso. Per ognuno: cosa ho fatto, perché è dubbio, cosa si p
 
 ## Ancora da fare
 
-- Modelli da parete e DrillStand: compilati e avviati, da provare nell'app; commit non ancora pushati.
+- Modelli da parete e DrillStand: compilati, avviati e pushati; da provare nell'app.
