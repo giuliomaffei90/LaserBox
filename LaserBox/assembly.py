@@ -942,21 +942,55 @@ def CardBox(box, parts):
             for p in parts]
 
 
+def card_back(x0, y0, w, l):
+    """The pattern on a card's back, after the classic bicycle back: a coloured field inside a white
+    rim, and on it, in white, a frame line, a fine diagonal lattice and two spoked wheels. Returns
+    (field, pattern), the pattern one polygon full of holes."""
+    rim, line = 0.055 * w, 0.3
+    field = rect(x0 + rim, y0 + rim, x0 + w - rim, y0 + l - rim)
+    inner = field.buffer(-0.8, join_style=2)
+    frame = inner.difference(inner.buffer(-line, join_style=2))
+    step, cx = 2.6, x0 + w / 2
+    lines = []
+    for k in range(-int(l / step) - 4, int((w + l) / step) + 4):
+        for a, b in (((x0 + k * step, y0), (x0 + k * step + l * 0.55, y0 + l)),
+                     ((x0 + w - k * step, y0), (x0 + w - k * step - l * 0.55, y0 + l))):
+            lines.append(LineString([a, b]).buffer(line / 2, cap_style=2))
+    lattice = unary_union(lines).intersection(inner)
+    r = 0.28 * w
+    wheels = []
+    for cy in (y0 + l * 0.3, y0 + l * 0.7):
+        c = Point(cx, cy)
+        ring = c.buffer(r).difference(c.buffer(r - 1.2 * line))
+        hub = c.buffer(0.18 * r).difference(c.buffer(0.18 * r - line))
+        spokes = [LineString([(cx + 0.18 * r * math.cos(i * math.pi / 8), cy + 0.18 * r * math.sin(i * math.pi / 8)),
+                              (cx + r * math.cos(i * math.pi / 8), cy + r * math.sin(i * math.pi / 8))]).buffer(line / 2)
+                  for i in range(16)]
+        lattice = lattice.difference(c.buffer(r))
+        wheels += [ring, hub] + spokes
+    pattern = unary_union([frame, lattice] + wheels)
+    return field, [g for g in getattr(pattern, "geoms", [pattern]) if g.area > 0.05]
+
+
 @decoration("CardBox", "cards")
 def card_decks(box):
     """A deck of poker cards (63.5 × 88.9, 54 cards ≈ 17 mm) lying in each compartment, smaller if
-    the compartment is: white edges, and on top the back of the first card, red inside a white rim."""
+    the compartment or the box is: white edges, and on top the first card's back (see card_back),
+    red and blue in turn."""
     t = box.thickness
     inlays = t if box.openingdirection == "right" else 0   # glued to the front and back
     depth = box.boxdepth - 2 * inlays
-    high = min(17.0, box.boxhight - 3)
+    high = min(17.0, box.boxhight - 0.5)
     out, pos = [], t
-    for s in box.sx:
+    for i, s in enumerate(box.sx):
         w, l = min(63.5, s - 0.5), min(88.9, depth - 0.5)
         x0, y0 = pos + (s - w) / 2, inlays + (depth - l) / 2
-        card = lambda inset, r: rect(x0 + inset + r, y0 + inset + r, x0 + w - inset - r, y0 + l - inset - r).buffer(r, quad_segs=4)
-        out += Placement((0, 0, 0), X, Y, 1).pieces([card(0, 3)], high)
-        out += [dict(p, decoration="cardback") for p in Placement((0, 0, high), X, Y, 1).pieces([card(3, 1.5)], 0.15)]
+        deck = rect(x0 + 3, y0 + 3, x0 + w - 3, y0 + l - 3).buffer(3, quad_segs=4)
+        field, pattern = card_back(x0, y0, w, l)
+        back = ("cardback", "cardback-blue")[i % 2]
+        out += Placement((0, 0, 0), X, Y, 1).pieces([deck], high)
+        out += [dict(p, decoration=back) for p in Placement((0, 0, high), X, Y, 1).pieces([field], 0.08)]
+        out += Placement((0, 0, high + 0.08), X, Y, 1).pieces(pattern, 0.08)
         pos += s + t
     return out
 

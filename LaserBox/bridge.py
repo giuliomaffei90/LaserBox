@@ -36,7 +36,8 @@ GENERATORS = {cls.__name__: cls for cls in boxes.generators.getAllBoxGenerators(
 SKIPPED = {"input", "output", "format", "help"}
 # The app's own defaults where they differ from boxes.py's (the app sends only the values changed).
 DEFAULTS = {
-    "CardBox": {"y": 89, "h": 40, "sx": "63.5*2", "openingdirection": "right", "fingerhole_depth": 30},
+    "CardBox": {"y": 89, "h": 17, "sx": "63.5*2", "openingdirection": "right", "fingerhole": "custom",
+                "fingerhole_depth": 10},
 }
 INFO_LINK = re.compile(r"\s*\[[^\]]*\]\([^)]*\)")  # the web form's "[🛈](url)" help links
 
