@@ -7,7 +7,6 @@ pezzi di test, pezzi e campioni, "Varie"), le decorazioni e l'esploso. Per ognun
 
 - **StorageRack** con bordo superiore `S`: il secondo ripiano pieno non ha dove agganciarsi ed è
   lasciato fuori.
-- **SkadisBoard**: le 8 rondelle non hanno una posizione data.
 - **RollHolder / WallRollHolder**: i due anelli dell'asse ora arrivano al 3D (erano l'ultimo tracciato
   del disegno, che andava perso) ma non sono ancora posizionati: non compaiono. L'asse c'è come
   decorazione.
