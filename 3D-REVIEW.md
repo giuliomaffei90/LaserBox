@@ -376,6 +376,6 @@ pezzi di test, pezzi e campioni, "Varie"), le decorazioni e l'esploso. Per ognun
 
 - Modelli da parete e DrillStand: compilati, avviati e pushati; da provare nell'app.
 - Motivi di fori e pezzi di test (nuova categoria "Test", ultima): compilati e avviati; da provare nell'app.
-- Pezzi e campioni: non compilati; da provare nell'app.
-- "Varie" (53 modelli): non compilati; da provare nell'app. LaptopStand è girato di 25° nella
+- Pezzi e campioni: compilati e avviati; da provare nell'app.
+- "Varie" (53 modelli): compilati e avviati; da provare nell'app. LaptopStand è girato di 25° nella
   galleria (TURN) perché un triangolo non si veda di taglio: verificare il verso.
