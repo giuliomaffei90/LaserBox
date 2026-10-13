@@ -13832,6 +13832,10 @@ msgstr "listello alla francese"
 msgid "skadis"
 msgstr "Skadis"
 
+#. possible choice for walltype (LaserBox's RollHolder: boxes.py's own, screwed to the wall)
+msgid "screws"
+msgstr "avvitato al muro"
+
 #. help for parameter width
 #: boxes/generators/wallcaliperholder.py
 msgid "width of the long end"

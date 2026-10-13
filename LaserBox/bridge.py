@@ -58,6 +58,44 @@ boxes.Boxes.adjustSize = _adjust_size(boxes.Boxes.adjustSize)
 # boxes.py's "Unstable" group (generators still being worked on) is left out.
 GENERATORS = {cls.__name__: cls for cls in boxes.generators.getAllBoxGenerators().values()
               if cls.webinterface and cls.ui_group != "Unstable"}
+
+
+class RollHolder(boxes.generators.wallrollholder.WallRollHolder):
+    """Holder for kitchen rolls or other rolls"""
+
+    def __init__(self) -> None:
+        super().__init__()
+        walltype = next(a for a in self.argparser._actions if a.dest == "walltype")
+        walltype.choices, walltype.default = ["screws", *walltype.choices], "screws"
+        self.argparser.add_argument(
+            "--screw_holes", action="store", type=float, default=4,
+            help="diameter of mounting holes in mm")
+        self.argparser.add_argument(
+            "--one_piece", action="store", type=boxes.boolarg, default=True,
+            help="have a continuous back plate instead of two separate holders")
+
+    def _impl(self):
+        """boxes.py's RollHolder screwed to the wall, its WallRollHolder on a wall system."""
+        screwed = self.walltype == "screws"
+        return boxes.generators.rollholder.RollHolder if screwed else boxes.generators.wallrollholder.WallRollHolder
+
+    def side(self, move=None):
+        return self._impl().side(self, move)
+
+    def backCB(self):
+        return self._impl().backCB(self)
+
+    def rings(self):
+        self.rings_at = self.ctx._m  # where the rings start: the 3D view places them from it
+        return self._impl().rings(self)
+
+    def render(self):
+        return self._impl().render(self)
+
+
+# One roll holder, screwed or on a wall system: boxes.py's two, merged.
+GENERATORS["RollHolder"] = RollHolder
+del GENERATORS["WallRollHolder"]
 # Not offered: the reference rectangle and its QR code are never drawn, debug is off (see configure).
 SKIPPED = {"input", "output", "format", "help", "reference", "qr_code", "debug"}
 # Options taken out of single generators (left at boxes.py's default).

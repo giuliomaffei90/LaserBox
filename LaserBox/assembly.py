@@ -3621,14 +3621,21 @@ def RollHolder(box, parts):
     """The back plate on the wall (u = X, v up; its callback's frame r in from its corner), the two
     arms standing out of it (drawn with u up, v out, the plate's face at v = t), w apart, and
     outside each arm a brace lying flat under the axle (see _right_triangles): one leg along the
-    plate, one along the arm. Two plates instead of one: the second turned to the right (drawn
-    mirrored). The rings, drawn last, are left out."""
+    plate, one along the arm. Two plates instead of one (screwed, not one_piece): the second turned
+    to the right (drawn mirrored). The arms have no hole for the axle: the two rings, drawn last
+    (U-shaped, round outside as the arm's tip), are glued on the arms' inner faces round the tip,
+    open upwards, and the axle is laid in them. (bridge.RollHolder merges boxes.py's RollHolder,
+    walltype screws, and WallRollHolder.)"""
     t, w, d, a, h = box.thickness, box.width, box.diameter, box.axle, box.height
     x0, x1 = h / 4 + t / 2 - 3 * t, h / 4 + t / 2 + t - 3 * t + w     # the arms' mid-planes
-    zm = h - 3 * t - a / 2                                            # the braces'
+    zm = h - 3 * t - a / 2                                            # the braces', and the axle's centre
     out = (0, -1, 0)
-    sides, braces, plates = parts[:2], parts[2], parts[3:4 if getattr(box, "one_piece", True) else 5]
-    items = [(sides[0], Placement((x0 - t / 2, t, 0), Z, out, 1)), (sides[1], Placement((x1 - t / 2, t, 0), Z, out, 1))]
+    two = box.walltype == "screws" and not box.one_piece
+    sides, braces, plates = parts[:2], parts[2], parts[3:5 if two else 4]
+    margin = 0 if box.walltype == "screws" else box.edges["B"].margin()   # the arms drawn from moveTo(margin)
+    arm = lambda p: Affine.translation(0, -margin) * local_matrix(p.record)
+    items = [(sides[0], Placement((x0 - t / 2, t, 0), Z, out, 1), arm(sides[0])),
+             (sides[1], Placement((x1 - t / 2, t, 0), Z, out, 1), arm(sides[1]))]
     corners = [Placement((x0 - t / 2, 0, zm + t / 2), X, out, 1), Placement((x1 + t / 2, 0, zm - t / 2), (-1, 0, 0), out, 1)]
     for (frame, kept), q in zip(_right_triangles(braces, h / 4, t), corners):
         q.keep = kept
@@ -3638,10 +3645,17 @@ def RollHolder(box, parts):
     else:
         items += [(plates[0], Placement((0, 0, 0), X, Z, -1)),
                   (plates[1], Placement((x0 + x1, 0, 0), (-1, 0, 0), Z, 1))]
+    # rings(), replayed from where it started (bridge.RollHolder records it): from moveTo(0, a + 1.5t,
+    # -90) a half ring r + 3t round centred at (r - 1.5t, r + 3t), open towards -x, one leg going on
+    # r - 1.5t; then moveTo(a - t, a + 12t, 180) to the second. Turned so they open up (+v).
+    r = a / 2
+    at = box.rings_at * Affine.translation(0, a + 1.5 * t) * Affine.rotation(-90)
+    faces = [Placement((x0 + t / 2, -d / 2, zm), Y, Z, 1), Placement((x1 - t / 2, -d / 2, zm), Y, Z, -1)]
+    for q in faces:
+        q.keep = lambda p: p.contains(Point(0, -r - 1.5 * t))
+        items.append((parts[-1], q, Affine.rotation(-90) * ~(at * Affine.translation(r - 1.5 * t, r + 3 * t))))
+        at = at * Affine.translation(a - t, a + 12 * t) * Affine.rotation(180)
     return items
-
-
-RECIPES["WallRollHolder"] = RollHolder   # the same, the arms' joints to the plate for the wall system
 
 
 def _drill_stand(box, parts, left_foot, feet=0.0):
@@ -4102,7 +4116,7 @@ def RobotArm(box, parts):
 WALLS = {
     **{name: (lambda box: box.thickness) for name in (
         "WallConsole", "WallHook", "WallCaliper", "WallSlottedHolder", "WallChiselHolder", "WallPliersHolder",
-        "WallWrenchHolder", "WallHopper", "RollHolder", "WallRollHolder", "KeyHolder", "Hook")},
+        "WallWrenchHolder", "WallHopper", "RollHolder", "KeyHolder", "Hook")},
     "WallPinRow": lambda box: 0.0,
     "WallPlaneHolder": lambda box: 0.0,
     "WallStairs": lambda box: box.y,
@@ -4189,25 +4203,25 @@ def _rod(kind, at, axis, across, centre, r, a, b, segs=12):
 
 
 def _kitchen_roll(box):
-    """A kitchen roll (0.9 of the roll diameter allowed, its 44 mm core; 4 mm shorter than the axle
-    between the arms) hanging on its dowel by the core's top, a sheet hanging from its front."""
+    """The dowel (width long, 0.5 mm play) lying in the rings between the arms, and a kitchen roll
+    (0.9 of the roll diameter allowed, its 44 mm core; 4 mm shorter than the gap between the rings)
+    hanging on it by the core's top, a sheet hanging from its front."""
     t, w, d, a, h = box.thickness, box.width, box.diameter, box.axle, box.height
     x0 = h / 4 + t / 2 - 3 * t                      # the left arm's mid-plane (see RollHolder)
     za, ya = h - a / 2 - 3 * t, -d / 2              # the axle's centre
     R, core, rod = 0.45 * d, 22.0, a / 2 - 0.5
     zr = za - (core - 2 - rod)                      # the core rests on the dowel
-    out = _rod("dowel", (x0 - t / 2 - 6, 0, 0), X, Y, (ya, za), rod, 0, w + 2 * t + 12)
-    left = x0 + t / 2 + 2
+    out = _rod("dowel", (x0 + t / 2 + 0.25, 0, 0), X, Y, (ya, za), rod, 0, w - 0.5)
+    left, inner = x0 + 3 * t / 2 + 2, w - 2 * t                # between the rings
     out += _solid("towel", Placement((left, 0, 0), Y, Z, 1), Point(ya, zr).buffer(R, quad_segs=24).difference(
-        Point(ya, zr).buffer(core, quad_segs=16)), w - 4)
+        Point(ya, zr).buffer(core, quad_segs=16)), inner - 4)
     out += _solid("cardboard", Placement((left - 0.5, 0, 0), Y, Z, 1), Point(ya, zr).buffer(core, quad_segs=16).difference(
-        Point(ya, zr).buffer(core - 2, quad_segs=16)), w - 3)
-    out += _solid("towel", Placement((left, ya - R + 0.3, 0), X, Z, 1), rect(0, zr - R - 70, w - 4, zr), 0.4)
+        Point(ya, zr).buffer(core - 2, quad_segs=16)), inner - 3)
+    out += _solid("towel", Placement((left, ya - R + 0.3, 0), X, Z, 1), rect(0, zr - R - 70, inner - 4, zr), 0.4)
     return out
 
 
 DECORATIONS.setdefault("RollHolder", []).append(_kitchen_roll)
-DECORATIONS.setdefault("WallRollHolder", []).append(_kitchen_roll)
 
 
 @decoration("WallPlaneHolder", "iron")

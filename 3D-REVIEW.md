@@ -7,9 +7,6 @@ pezzi di test, pezzi e campioni, "Varie"), le decorazioni e l'esploso. Per ognun
 
 - **StorageRack** con bordo superiore `S`: il secondo ripiano pieno non ha dove agganciarsi ed è
   lasciato fuori.
-- **RollHolder / WallRollHolder**: i due anelli dell'asse ora arrivano al 3D (erano l'ultimo tracciato
-  del disegno, che andava perso) ma non sono ancora posizionati: non compaiono. L'asse c'è come
-  decorazione.
 - **FrontPanel**: i fori fuori da ogni `outline` non sono mostrati; senza `outline` il 3D è vuoto.
 - **Gears**: la dima coi due fori all'interasse (e il testo con le misure) non ha contorno: non c'è.
 - **NemaMount**: i fori per le dita disegnati per ultimi, da tagliare in una piastra propria su cui
@@ -129,6 +126,16 @@ pezzi di test, pezzi e campioni, "Varie"), le decorazioni e l'esploso. Per ognun
   divisori verticali. Approssimazione di qualche decimo di mm sul piano del fondo.
 - **WallHopper**: il sistema locale dei fianchi (`polygonWall`) è ricavato dai fori, non dal codice.
 - **WallWrenchHolder**: verso delle fessure (dalla parte anteriore verso il muro, scendendo).
+- **RollHolder**: i bracci non hanno un foro per l'asse. Ho supposto che i due anelli a U (larghi
+  quanto la punta tonda del braccio) siano incollati sulle facce interne dei bracci, attorno alla
+  punta, aperti verso l'alto, e che l'asse ci si appoggi dentro (le foto mostrano anelli scuri fra
+  braccio e rotolo). L'anello ha una gamba più lunga dell'altra; nel 3D la gamba lunga sta davanti,
+  lontano dal muro, così trattiene l'asse quando si tira la carta. Il tassello ora è lungo quanto `width`, fra i bracci (prima li attraversava).
+- **RollHolder** (unisce RollHolder e WallRollHolder di boxes.py, `bridge.RollHolder`): con il tipo
+  di parete "avvitato al muro" disegna il RollHolder originale, con gli altri il WallRollHolder.
+  `screw_holes` e `one_piece` contano solo avvitato. Con la guida DIN il contorno del braccio
+  disegnato dal generatore resta aperto di 1 mm (non si staccherebbe dal foglio) e nel 3D i bracci
+  non compaiono: non corretto.
 - **WallSlottedHolder / WallChiselHolder / RollHolder**: i triangoli di rinforzo sono disegnati
   annidati in un unico pezzo; li separo riconoscendoli dagli ingombri. Funziona con tutti i tipi di
   muro provati, ma è euristico.
@@ -338,8 +345,8 @@ pezzi di test, pezzi e campioni, "Varie"), le decorazioni e l'esploso. Per ognun
 ## Modifiche trasversali da tenere d'occhio
 
 - `assemble` ora chiude l'ultimo tracciato lasciato aperto dal generatore (come fa `close()`): senza,
-  la girandola di FanHole spariva. Tra i modelli già fatti cambiava solo RollHolder (gli anelli, ora
-  esclusi apposta); gli altri restano identici con i valori predefiniti.
+  la girandola di FanHole spariva. Tra i modelli già fatti cambiava solo RollHolder (gli anelli);
+  gli altri restano identici con i valori predefiniti.
 - `Placement(plate=…)`: per i pezzi fatti di soli fori, i fori che stanno dentro la lastra vengono
   sottratti dalla lastra.
 - Misure esterne e distanza tra i pezzi: boxes.py, per passare dalle misure esterne a quelle
