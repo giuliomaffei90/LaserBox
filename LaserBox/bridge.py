@@ -55,7 +55,9 @@ def _adjust_size(adjust):
 
 boxes.Boxes.adjustSize = _adjust_size(boxes.Boxes.adjustSize)
 
-GENERATORS = {cls.__name__: cls for cls in boxes.generators.getAllBoxGenerators().values() if cls.webinterface}
+# boxes.py's "Unstable" group (generators still being worked on) is left out.
+GENERATORS = {cls.__name__: cls for cls in boxes.generators.getAllBoxGenerators().values()
+              if cls.webinterface and cls.ui_group != "Unstable"}
 # Not offered: the reference rectangle and its QR code are never drawn, debug is off (see configure).
 SKIPPED = {"input", "output", "format", "help", "reference", "qr_code", "debug"}
 # The app's own defaults where they differ from boxes.py's (the app sends only the values changed).
@@ -616,6 +618,7 @@ if __name__ == "__main__":
     if sys.argv[1:] == ["--selftest"]:
         groups = list_generators()["groups"]
         assert len(groups) > 3 and groups[-1]["name"] == "Tests"
+        assert "Unstable" not in {g["name"] for g in groups} and "Castle" not in GENERATORS
         assert {g["name"] for g in groups[-1]["generators"]} == {"BurnTest", "FillTest", "FlexTest", "FlexTest2"}
         spec = generator_args("UniversalBox")
         assert any(a["name"] == "x" for g in spec["groups"] for a in g["args"])

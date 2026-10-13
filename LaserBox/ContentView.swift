@@ -46,7 +46,6 @@ struct ContentView: View {
         case "WallMounted": "rectangle.on.rectangle.angled"
         case "Holes": "circle.grid.3x3"
         case "Part": "puzzlepiece"
-        case "Unstable": "flask"
         case "Tests": "testtube.2"
         default: "square.grid.3x3"
         }
