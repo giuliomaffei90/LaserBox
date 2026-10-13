@@ -2987,12 +2987,11 @@ def vinyl_records(box):
 def SBCMicroRack(box, parts):
     """Two sides (u from the top down, v = Y; the stackable feet at u = H) with the plain base plate
     in the feet's finger holes and a shelf in each row of holes, counted from the top; the boards'
-    port holes are in the first side, put on the right. The switch holder (--switch) has no finger
-    holes to say where it goes and is left out."""
+    port holes are in the first side, put on the right. (The switch holder, --switch, is not offered.)"""
     t, hp = box.thickness, box.clearance_z + box.thickness
     H = box.sbcs * hp + hp / 2
     L = box.y + 2 * box.hole_dist_edge
-    sides, rest = parts[:2], parts[3 if box.switch else 2:]
+    sides, rest = parts[:2], parts[2:]
     down = (0, 0, -1)
     out = [(sides[0], Placement((L, 0, H), down, Y, 1)), (sides[1], Placement((0, 0, H), down, Y, -1)),
            (rest[0], Placement((0, 0, 0), X, Y, -1))]

@@ -5,10 +5,6 @@ pezzi di test, pezzi e campioni, "Varie"), le decorazioni e l'esploso. Per ognun
 
 ## Pezzi lasciati fuori
 
-- **SBCMicroRack**: il supporto per lo switch di rete (`--switch`) è un terzo fianco senza fori
-  per i ripiani: ha solo il foro per il tondino (con `--stable`), che c'è anche nel fianco senza
-  porte. Forse sta parallelo a quel fianco, con lo switch in mezzo, ma la distanza non è data:
-  non compare nel 3D.
 - **StorageRack** con bordo superiore `S`: il secondo ripiano pieno non ha dove agganciarsi ed è
   lasciato fuori.
 - **SkadisBoard**: le 8 rondelle non hanno una posizione data.

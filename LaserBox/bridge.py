@@ -60,6 +60,8 @@ GENERATORS = {cls.__name__: cls for cls in boxes.generators.getAllBoxGenerators(
               if cls.webinterface and cls.ui_group != "Unstable"}
 # Not offered: the reference rectangle and its QR code are never drawn, debug is off (see configure).
 SKIPPED = {"input", "output", "format", "help", "reference", "qr_code", "debug"}
+# Options taken out of single generators (left at boxes.py's default).
+SKIPPED_BY = {"SBCMicroRack": {"switch"}}  # the switch holder: nothing says where it goes
 # The app's own defaults where they differ from boxes.py's (the app sends only the values changed).
 DEFAULTS = {
     "CardBox": {"y": 89, "h": 17, "sx": "63.5*2", "openingdirection": "right", "fingerhole": "custom",
@@ -222,7 +224,8 @@ def generator_args(name):
     box = make(name)
     groups = []
     for group in box.argparser._action_groups:
-        args = [describe(a, getattr(group, "prefix", None), name) for a in group._group_actions if a.dest not in SKIPPED]
+        args = [describe(a, getattr(group, "prefix", None), name) for a in group._group_actions
+                if a.dest not in SKIPPED | SKIPPED_BY.get(name, set())]
         if args:
             groups.append({"title": tr(group.title), "args": args, "advanced": group.title.startswith("Settings for")})
     # The generator's own settings first, then the defaults, then the edge settings.
