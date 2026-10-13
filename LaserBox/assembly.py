@@ -1207,15 +1207,7 @@ def HingeBox(box, parts):
                 (parts[9], Placement((0, 0, h + hl), X, Y, 1, **lid))]
         hinges = parts[10:]
 
-    frames = []  # (part, its local frame → the piece's own) for each eye piece
-    for part in hinges:
-        local = local_matrix(part.record)
-        for q in polygons_of(loops_of(part, local)):
-            if q.interiors:
-                c = Polygon(q.interiors[0]).centroid
-                _, miny, _, maxy = q.bounds
-                turn = Affine.scale(1 if maxy - c.y > c.y - miny else -1)   # drawn upright or turned
-                frames.append((part, Affine.translation(0, e) * turn * Affine.translation(-c.x, -c.y) * local))
+    frames = _eye_frames(hinges, e)
     width = (t + p) * n + p + 2 * sp
     hn = min(hs.hinges, int(x // width))
     starts = [(x - width) / 2] if hn == 1 else [j * (width + (x - hn * width) / (hn - 1)) for j in range(hn)]
@@ -1233,6 +1225,21 @@ def HingeBox(box, parts):
                 part, local = frames.pop(0)
                 out.append((part, Placement(origin, U, V, 1, keep=eye, lid=i % 2 == 1), local))
     return out
+
+
+def _eye_frames(parts, e):
+    """(part, its local frame → the piece's own) for each cabinet hinge eye piece drawn in parts: the
+    eye at (0, e), the tab towards +y."""
+    frames = []
+    for part in parts:
+        local = local_matrix(part.record)
+        for q in polygons_of(loops_of(part, local)):
+            if q.interiors:
+                c = Polygon(q.interiors[0]).centroid
+                _, miny, _, maxy = q.bounds
+                turn = Affine.scale(1 if maxy - c.y > c.y - miny else -1)   # drawn upright or turned
+                frames.append((part, Affine.translation(0, e) * turn * Affine.translation(-c.x, -c.y) * local))
+    return frames
 
 
 def _turned(place, point, axis, degrees):
@@ -3201,8 +3208,10 @@ def StorageShelf(box, parts):
     from the front (the horizontals' slots, sy reversed, are at their v = 0 at X = W), the inner
     verticals from the back, and the retainers standing on each level's front edge. A lid style's
     tops lie on the walls, their u across (drawLid draws them y × x, see bundle-runtime.sh), the
-    edge meeting the back's (hinge, slide-in groove) at the back; the v edge's hinge parts are
-    left out."""
+    edge meeting the back's (hinge, slide-in groove) at the back. The v edge's cabinet hinges (style
+    inside) as in HingeBox, on one axis t above the back's top at its outer face, where the lid's
+    top face meets its cut edge: the back's eye pieces in the even slots hang down, their tab through
+    the back; the lid's in the odd ones lie along it, their tab down through the lid."""
     t, sy, sh, x = box.thickness, box.sy, box.sh, box.x
     W = sum(sy) + t * (len(sy) - 1)
     h = sum(sh) + t * (len(sh) - 1)
@@ -3224,10 +3233,27 @@ def StorageShelf(box, parts):
     at = lambda z: Placement((0, 0, z), X, Y, 1, lid=True)
     lids = {"E": [at(h + t), at(h)], "i": [Placement((0, x, h), X, back, -1, lid=True)], "L": [at(h)],
             "k": [at(h), Placement((W, 0, h), (-1, 0, 0), Y, -1, lid=True)],
-            "v": [Placement((W, x, h), (-1, 0, 0), back, 1, lid=True)]}.get(box.top_edge, [])
+            "v": [Placement((0, x, h), X, back, -1, lid=True)]}.get(box.top_edge, [])
     labels = [p.record.label for p in parts]
     first = max(i for i, l in enumerate(labels) if l in ("left", "right", "bottom") or (l or "").startswith("inner horizontal")) + 1
     out = [(p, place[p.record.label]) for p in parts if p.record.label in place]
+    hs = box.edges["v"].settings
+    if box.top_edge == "v" and hs.style == "inside":
+        e, p, sp, n = hs.eye, hs.play, hs.spacing, hs.eyes_per_hinge
+        frames = _eye_frames(parts[labels.index("lid top") + 1:labels.index("back")], e)
+        width = (t + p) * n + p + 2 * sp
+        hn = min(hs.hinges, int(W // width))
+        starts = [(W - width) / 2] if hn == 1 else [j * (width + (W - hn * width) / (hn - 1)) for j in range(hn)]
+        eye = lambda q: any(Polygon(r).contains(Point(0, e)) for r in q.interiors)
+        for start in starts:
+            for i in range(n):
+                if not frames:
+                    break
+                axis = (start + sp + p + i * (t + p) + t / 2, x + t, h + t)
+                U, V = (Y, (0, 0, -1)) if i % 2 == 0 else (Z, back)
+                origin = _add(_add(axis, V, -e), _cross(U, V), -t / 2)
+                part, local = frames.pop(0)
+                out.append((part, Placement(origin, U, V, 1, keep=eye, lid=i % 2 == 1), local))
     return out + list(zip(parts[first:labels.index("back")], lids))
 
 

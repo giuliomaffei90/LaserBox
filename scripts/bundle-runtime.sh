@@ -17,6 +17,8 @@ sed -i '' 's/font_edge = back_edge/front_edge = back_edge/' "$src/boxes/generato
 sed -i '' '/label="for label (optional)"/d' "$src/boxes/generators/stackablebin.py"
 # StorageShelf's x is the depth: the lid is y wide, so its back edge (hinge, slide-in…) meets the back.
 sed -i '' 's/self.drawLid(x, y, self.top_edge)/self.drawLid(y, x, self.top_edge)/' "$src/boxes/generators/storageshelf.py"
+# SpicesRack: the feet take the bottom row's supports' holes, so that row's supports are not cut.
+sed -i '' 's/self.partsMatrix((self.numx-1)\*self.numy,/self.partsMatrix((self.numx-1)*(self.numy-self.feet),/' "$src/boxes/generators/spicesrack.py"
 
 uv python install "$PY_VERSION"
 cp -R "$(dirname "$(dirname "$(uv python find --managed-python "$PY_VERSION")")")" Runtime/python
