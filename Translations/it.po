@@ -11240,6 +11240,10 @@ msgstr ""
 msgid "height of the ramp in mm"
 msgstr "altezza della rampa in mm"
 
+#. help for parameter z (ZBeam, see bundle-runtime.sh)
+msgid "inner width of the second flange in mm"
+msgstr "larghezza interna della seconda ala in mm"
+
 #. help for parameter h
 #: boxes/generators/ramp.py
 msgid "depth of the ramp in mm, will influence the steepness of the ramp"

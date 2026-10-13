@@ -4627,7 +4627,7 @@ def SevenSegmentPattern(box, parts):
     the finger holes of the back plate. The generator draws neither plate: both are the separators'
     outline and t more round it. The separators, drawn in pairs by length, go where
     seven_segment_holes puts their holes, twice (the second half turned 180° about the middle), each
-    centred on its holes (the second length is drawn 0.8 shorter than its holes)."""
+    centred on its holes."""
     t, x, h = box.thickness, box.digit, box.h
     l, w, d = 0.4 * x, 0.05 * x, 0.05 * x
     width = l + 2 * w + d
@@ -4890,9 +4890,7 @@ def Arcade(box, parts):
     panel's joint edge (f) and the holes' direction disagree, the panel is turned end for end so
     its f meets the neighbour's F: the front (f up at the keyboard), the speaker panel (f at the
     marquee's front, the speakers near it) and the top back (f at the marquee's front). The back
-    cover (no joints) is screwed outside the two back strips, from the lower one's foot up.
-    side() first cuts the outline without its rounded corners, r = 10 inside the real one (which
-    would cut the side into a frame and a panel): that path is left out."""
+    cover (no joints) is screwed outside the two back strips, from the lower one's foot up."""
     t, w = box.thickness, box.width
     rows = _arcade_side(box)
     panels = {0: ("floor", box.bottom, False), 1: ("back low", box.back, False), 3: ("back high", box.back, False),
@@ -4903,7 +4901,7 @@ def Arcade(box, parts):
     (u, v), angle = rows["back low"]
     out.append((parts[2], _arcade_panel((u + t, v), angle, t)))
     for side, x0, s in ((parts[10], 0, -1), (parts[11], w, 1)):
-        out.append((SimpleNamespace(record=side.record, pathes=side.pathes[1:]), Placement((x0, 0, 0), Y, Z, s)))
+        out.append((side, Placement((x0, 0, 0), Y, Z, s)))
     return out
 
 

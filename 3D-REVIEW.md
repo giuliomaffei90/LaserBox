@@ -20,12 +20,8 @@ pezzi di test, pezzi e campioni, "Varie"), le decorazioni e l'esploso. Per ognun
   sulle stesse posizioni, senza calcolarne l'ingranamento.
 - **Pulley**: il generatore disegna un solo bordo (`top`), che metto sopra; sotto non c'è.
 - **SkadisStand**: il generatore disegna un solo piede, il pannello ne vuole due: ne mostro uno.
-- **WineRack** `walls=minimal`: il generatore disegna più pareti di quante ne abbiano i fori (30
-  contro 22 con i valori predefiniti); quelle in più non sono mostrate.
-- **Arcade**: `side()` disegna prima, in un `saved_context`, il contorno a spigoli vivi (r = 10 dentro quello vero arrotondato): tagliato davvero dividerebbe ogni fianco in una cornice larga 10 mm e un pannello interno con tutti i fori. Nel 3D quel tracciato (il primo path del pezzo) è tolto e il fianco è un pezzo unico; sembra un residuo del generatore, da verificare sul file tagliato.
 - **OttoBody**: i due PCB_Clamp, il PCB_Clip e la piastrina 15×15 del pulsante sono lasciati fuori: non hanno incastri né fori corrispondenti nel corpo, quindi non si sa dove vanno (probabilmente tengono l'Arduino nella testa).
 - **PhotoFrame**: la "Photo" che il generatore disegna è solo una sagoma (niente da tagliare): non è piazzata come parte, la foto è mostrata come decorazione di carta. Il vetro non è mostrato (non è tagliato e non c'è un tipo di decorazione per il vetro).
-- **CanStorage**: il pezzo "invisible" è solo uno spostamento ("left only"), non viene disegnato: niente da piazzare.
 - **CarbonFilter**: manca il bordo superiore di listelli di legno (2–3 cm) che la descrizione del generatore chiede di incollare intorno: non è tagliato, non l'ho aggiunto. Mancano anche la rete e il carbone tra i due binari di ogni falda.
 - **AgricolaInsert**: il separatore di carta del vassoio delle carte (generate_paper_divider) non è montato: è di carta e sta libero fra le carte; senza carte resterebbe in piedi appoggiato a niente, e in 3D sarebbe spesso come il legno.
 - **AgricolaInsert**: niente carte, tessere, segnalini né i due cartoncini che la descrizione mette fra le scatole basse e i vassoi superiori.
@@ -65,14 +61,11 @@ pezzi di test, pezzi e campioni, "Varie"), le decorazioni e l'esploso. Per ognun
   coperchio (pezzi rotti).
 - **WallPliersHolder**: i rinforzi interni sono centrati dove il generatore mette i fori, mezzo
   spessore fuori dal confine tra gli scomparti.
-- **SevenSegmentPattern**: il secondo separatore è disegnato 0,8 mm più corto dei suoi fori; l'ho
-  centrato sui fori.
 - **FanHole**: i bracci della girandola restano aperti di 0,34 mm (diametro 80): li chiudo come fori.
   Con diametri piccoli (40 mm, 10 bracci) i bracci del generatore si incrociano e alcuni fori si
   fondono.
 - **RobotArm**: con i valori predefiniti il generatore non disegna nulla. Ho messo come predefiniti
   dell'app due segmenti (Mm e Mu): cambia anche il disegno 2D.
-- **ZBeam**: z ha la stessa descrizione di y ("profondità interna"); è la seconda ala della Z.
 - **DisplayShelf** con angolo negativo: i divisori, perpendicolari al ripiano inclinato,
   sporgono dal retro di qualche mm. È la geometria del generatore.
 - **Arcade**: il fondo è lungo `y − 40 − t/2` e finisce circa 28 mm prima della striscia posteriore bassa: il suo bordo a dita `f` sul retro non incastra in niente, e il bordo `F` della striscia resta libero. Ho seguito i fori dei fianchi.
@@ -97,8 +90,6 @@ pezzi di test, pezzi e campioni, "Varie"), le decorazioni e l'esploso. Per ognun
 - **Kamishibai**: le due strisce 16t × t "feee" per le serrature extra (in alto e in basso) vengono sempre disegnate, ma i fori per le dita che le ricevono nei piani superiore/inferiore esistono solo con LockScrewDiameter > 0 (il blocco è indentato dentro quello delle viti). Le ho messe dove sarebbero i fori (Y = -FrontExtraDepth·t, X da wi/2 - 8t, lunghe 16t).
 - **NightLightBox**: con "extra customizable face" la parete frontale e la faccia hanno tre fori quadrati ma i pioli disegnati sono due; il terzo foro ha la x calcolata da PlateVisibleHeight (PVH + 6.5t + M), probabilmente un errore. Ho messo i due pioli nei primi due fori.
 - **NightLightBox**: le tavole decorative e il diffusore sono pensati spessi WoodPlateThickness / DiffuserPlateThickness (5 mm), ma in 3D tutto è estruso con lo spessore della scatola: li ho centrati nelle loro fessure.
-- **FatBallDispenser**: con roof_hole_diameter = 0 il generatore va in errore (divisione per zero in `roof_tile`), quindi quell'opzione non si può provare; la ricetta gestisce comunque l'assenza del supporto.
-- **FatBallDispenser**: il poligono inciso sul supporto del tetto usa `t / atan(angolo)` invece di `tan`; ho posizionato il supporto con la geometria corretta (il bordo della faccia inferiore sulle facce interne delle tegole), non con l'incisione.
 - **TriangleLamp**: con sharpcorners le pareti dei cateti, allungate dal bordo C, scendono di circa 2 mm sotto il piano d'appoggio (è la parte da smussare a 22,5°); non ho modellato lo smusso.
 - **Clock**: la gamba posteriore, con le tacche centrate sui due ripiani, finisce circa 1,7 mm sopra il pavimento (le gambe anteriori invece poggiano): la lunghezza oltre la tacca inferiore (2·Tf − t + Rm·(1 − cos Af) + t) non coincide con l'altezza delle spalle delle gambe anteriori. Ho seguito gli incastri e lasciato la gamba sollevata.
 - **Clock**: le tacche della gamba posteriore sono larghe t − burn ma i ripiani sono spessi t: incastro forzato, mostrato centrato.
@@ -106,16 +97,13 @@ pezzi di test, pezzi e campioni, "Varie"), le decorazioni e l'esploso. Per ognun
 - **MagazineFile**: i due fianchi sono disegnati nello stesso pezzo, il secondo dopo un `moveTo(y + 15, h + hi + 15, 180)` (girato di mezzo giro). Li ho separati ricostruendo quella trasformazione: se il generatore cambia l'ordine o gli spostamenti, il secondo fianco va fuori posto.
 - **AirPurifier**: la parete che il generatore chiama "top" è alta d, ma lo spazio tra i due telai interni (o, con un filtro, tra il telaio e la piastra di chiusura) è d + 2: l'ho messa 1 mm sopra il telaio inferiore (due filtri) o contro la piastra di chiusura (un filtro).
 - **AirPurifier**: con un solo filtro i fori dei ventilatori della parete "top" sono centrati a (d + t + fh)/2 su una parete alta d, quindi escono dal suo bordo: lì non metto ventilatori nella decorazione.
-- **Ramp**: gli help di y e h sono scambiati rispetto al risultato: la profondità della rampa viene da y (tx ≈ y) e l'altezza da h (ty = tx·h/y); la pendenza è atan(h/y). Ho seguito i pezzi.
 - **Ramp**: tra la cima della parete verticale e la diagonale resta un piccolo cuneo vuoto (la diagonale arriva al filo esterno della parete verticale, t/cos a oltre lo spigolo interno); al piede la diagonale scende fino a terra davanti al fondo. Come da generatore.
 - **CoinBankSafe**: il foro della cerniera del coperchio è disegnato dal secondo callback, cioè all'inizio del bordo destro (vicino a u = y), mentre quello del fondo è vicino a u = 0: ho girato il coperchio sottosopra perché i due fori stiano uno sopra l'altro.
 - **CoinBankSafe**: la maniglia è una pinna piena (1,5t × 8t con la linguetta nella fessura dello sportello), senza foro per le dita: così la disegna il generatore.
-- **Sphere**: con top_hole_radius piccolo (es. 10 con raggio 100 e 8 spicchi) il generatore dà errore "cable hook radius is too big" anche con cable_hook = 0: il controllo non guarda se i ganci ci sono. Non è un problema della ricetta.
 - **TrafficLight**: le tre "horizontal Wall" (schermi sopra le luci) sono uguali tranne l'ultima, col bordo posteriore di tipo back_edge: l'ho messa in cima (sopra la prima luce, dove i fianchi hanno il bordo F), le altre nei fori tra le luci; la "bottom wall" sotto, profonda solo d (senza schermo).
 - **AllEdges**: il generatore disegna ogni campione solo su tre lati (su, il bordo in cima, giù) e lo lascia aperto in basso; alcuni bordi (cerniere da mobile, fori a pera "G") hanno fori sotto la linea di base, cioè fuori dalla striscia. Ho chiuso ogni campione con un fondo dritto 3t sotto il punto più basso disegnato, così i fori ci stanno; nella foto i campioni hanno il fondo ondulato e sono più alti.
 - **AllEdges**: il bordo a cremagliera ("R") apre un pezzo annidato a metà disegno: il contorno prosegue in un pezzo a parte; i due tratti sono ricongiunti per estremi coincidenti.
 - **AllEdges**: dove il contorno si incrocia in un angolo bruciato restano dei buchi di pochi µm che facevano sparire mezzo campione nella triangolazione (sembrava un cuneo): li tolgo (area < 0,5 mm²), come le schegge chiuse dentro.
-- **DiceTower**: con `ramps` = 1 il generatore stesso va in errore (divisione per zero in `side()`); la ricetta non può farci niente.
 
 ## Geometria ricavata a ragionamento: verificare nell'app
 

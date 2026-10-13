@@ -152,7 +152,7 @@ def list_generators():
 
 
 # Words for boxes.py's short parameter names (x, h, sx…), by what their help says they are there
-# ("h" is mostly the height, the depth for a ramp); "*": whatever the help.
+# ("h" is mostly the height); "*": whatever the help.
 PARAMETER_NAMES = {
     ('ah', 'air hole sections bottom to top in mm'): 'air holes, bottom to top',
     ('aw', 'air hole slot width in mm'): 'air hole width',
@@ -171,7 +171,7 @@ PARAMETER_NAMES = {
     ('gw', 'width of th grip hole in mm (zero for no hole)'): 'grip hole width',
     ('h', 'Height of the matrix'): 'height',
     ('h', 'depth (with walls if outside is selected) in mm'): 'depth',
-    ('h', 'depth of the ramp in mm, will influence the steepness of the ramp'): 'depth',
+    ('h', 'height of the ramp in mm'): 'height',
     ('h', "height in mm or add 'u' at the end for Gridfinity units"): 'height',
     ('h', 'height of sidewalls of the tray (mm)'): 'side wall height',
     ('h', 'height of the box'): 'height',
@@ -214,7 +214,7 @@ PARAMETER_NAMES = {
     ('x', 'width of the ramp in mm, generally the width of the step the ramp is built for'): 'width',
     ('y', 'Height of the photo, not including any border'): 'photo height',
     ('y', 'Y dimension of tray/box that this fits into'): 'tray depth',
-    ('y', 'height of the ramp in mm'): 'height',
+    ('y', 'depth of the ramp in mm, will influence the steepness of the ramp'): 'depth',
     ('y', 'inner depth in mm'): 'depth',
     ('y', 'inner depth in mm (unless outside selected)'): 'depth',
     ('y', 'number of grids in Y direction (0=auto)'): 'grids in depth',

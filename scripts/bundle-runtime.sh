@@ -19,6 +19,25 @@ sed -i '' '/label="for label (optional)"/d' "$src/boxes/generators/stackablebin.
 sed -i '' 's/self.drawLid(x, y, self.top_edge)/self.drawLid(y, x, self.top_edge)/' "$src/boxes/generators/storageshelf.py"
 # SpicesRack: the feet take the bottom row's supports' holes, so that row's supports are not cut.
 sed -i '' 's/self.partsMatrix((self.numx-1)\*self.numy,/self.partsMatrix((self.numx-1)*(self.numy-self.feet),/' "$src/boxes/generators/spicesrack.py"
+# FatBallDispenser: the roof support's etched polygon is t / tan(roof angle) in, not t / atan(…);
+# no hanger hole (diameter 0) divided by zero: the same formula, multiplied out.
+sed -i '' 's|self.thickness / math.atan(ar_roof)|self.thickness / math.tan(ar_roof)|' "$src/boxes/generators/fatballdispenser.py"
+sed -i '' 's|(l_roof/2-dx_bottom)/(h_roof_tile/r_roof_hole)|(l_roof/2-dx_bottom)*r_roof_hole/h_roof_tile|' "$src/boxes/generators/fatballdispenser.py"
+# DiceTower with one ramp divided by zero working out the (unused) spacing of the others.
+sed -i '' 's|/ (self.ramps - 1)$|/ max(self.ramps - 1, 1)|' "$src/boxes/generators/dicetower.py"
+# Sphere: the cable hook radius only matters with cable hooks.
+sed -i '' 's|if self.cable_hook_radius + 1 > 0.8|if self.cable_hook and self.cable_hook_radius + 1 > 0.8|' "$src/boxes/generators/sphere.py"
+# Arcade: side() first cut a leftover outline without the rounded corners, r inside the real one,
+# which would cut each side into a frame and a panel.
+perl -0pi -e 's/\n        with self\.saved_context\(\):\n            self\.moveTo\(0, r\)\n            self\.polyline\(y, 90, h, 45[^\n]*//' "$src/boxes/generators/arcade.py"
+# Ramp: y is the depth (it sets the slope with h), h the height; their help texts were swapped.
+perl -0pi -e 's/help="height of the ramp in mm"/help="DEPTH"/; s/help="depth of the ramp in mm, will influence the steepness of the ramp"/help="height of the ramp in mm"/; s/help="DEPTH"/help="depth of the ramp in mm, will influence the steepness of the ramp"/' "$src/boxes/generators/ramp.py"
+# ZBeam: z is the second flange, not a depth.
+sed -i '' 's|help="inner depth in mm")|help="inner width of the second flange in mm")|' "$src/boxes/generators/zbeam.py"
+# WineRack, minimal walls, odd rows: the top row has no roofs, 2 per cell fewer walls to cut.
+perl -0pi -e 's/(            if self\.walls == "all":\n                tc -= cx\n)/$1            elif self.walls == "minimal":\n                tc -= 2 * cx\n/' "$src/boxes/generators/winerack.py"
+# SevenSegmentPattern (and Clock): the second separator as long as its finger holes (was 0.8 mm short).
+sed -i '' 's|2\*\*0.5\* x/4 - t,|2**0.5*(.55*x/2 - t) - t/2,|' "$src/boxes/generators/sevensegment.py"
 
 uv python install "$PY_VERSION"
 cp -R "$(dirname "$(dirname "$(uv python find --managed-python "$PY_VERSION")")")" Runtime/python
