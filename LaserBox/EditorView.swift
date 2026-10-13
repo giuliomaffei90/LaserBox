@@ -737,6 +737,7 @@ final class AssemblyStage {
         "grip-black": SheetMaterial.surface(NSColor(red: 0.12, green: 0.12, blue: 0.13, alpha: 1), roughness: 0.6, edge: "float3(0.95)"),
         "hss": SheetMaterial.surface(NSColor(red: 0.18, green: 0.18, blue: 0.20, alpha: 1), roughness: 0.35, edge: "float3(0.95)"),
         "hss-gold": SheetMaterial.surface(NSColor(red: 0.80, green: 0.62, blue: 0.25, alpha: 1), roughness: 0.3, edge: "float3(0.95)"),
+        "pcb": SheetMaterial.surface(NSColor(red: 0.05, green: 0.38, blue: 0.17, alpha: 1), roughness: 0.5, edge: "float3(0.95)"),
     ]
 
     /// SCNShape extrudes a flat path along z, centred; the path's even-odd rule turns inner rings into holes.

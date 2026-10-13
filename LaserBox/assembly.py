@@ -2980,8 +2980,8 @@ def vinyl_records(box):
 def SBCMicroRack(box, parts):
     """Two sides (u from the top down, v = Y; the stackable feet at u = H) with the plain base plate
     in the feet's finger holes and a shelf in each row of holes, counted from the top; the boards'
-    port holes are in the first side, put on the right. The switch holder (--switch) has no holes
-    to say where it goes and is left out."""
+    port holes are in the first side, put on the right. The switch holder (--switch) has no finger
+    holes to say where it goes and is left out."""
     t, hp = box.thickness, box.clearance_z + box.thickness
     H = box.sbcs * hp + hp / 2
     L = box.y + 2 * box.hole_dist_edge
@@ -2990,6 +2990,39 @@ def SBCMicroRack(box, parts):
     out = [(sides[0], Placement((L, 0, H), down, Y, 1)), (sides[1], Placement((0, 0, H), down, Y, -1)),
            (rest[0], Placement((0, 0, 0), X, Y, -1))]
     return out + [(p, Placement((0, 0, H - i * hp - hp / 2 - 1.5 + t / 2), X, Y, -1)) for i, p in enumerate(rest[1:])]
+
+
+@decoration("SBCMicroRack", "pcb")
+def raspberry_pis(box):
+    """A Raspberry Pi (85 × 56, the shelves' mounting hole grid 3.5 in from its edges) on the base and
+    on every shelf but the top one, as in the photo: on brass standoffs that centre its ports in the
+    port hole k·hp + 15 up the side (paint_netusb_holes, drawn from the feet), Ethernet and two USB
+    stacks out towards the port side at X = L; the SoC, the RAM and the GPIO header on top."""
+    t, hp = box.thickness, box.clearance_z + box.thickness
+    hx = box.hole_diameter + box.clearance_x + box.hole_dist_edge / 2    # as in paint_mounting_holes
+    hy = box.hole_diameter + box.clearance_y + box.hole_dist_edge / 2
+    gx, gy = box.hole_grid_dimension_x, box.hole_grid_dimension_y
+    x0, y0, x1, y1 = hx - 3.5, hy - 3.5, hx + gx + 23.5, hy + gy + 3.5
+    holes = [Point(hx + i * gx, hy + j * gy) for i in (0, 1) for j in (0, 1)]
+    out = []
+
+    def add(kind, polys, z0, z1):
+        out.extend(dict(p, decoration=kind) for p in Placement((0, 0, z0), X, Y, 1).pieces(polys, z1 - z0))
+
+    for k in range(box.sbcs):
+        floor = k * hp - 1.5 + t / 2 if k else 0     # the shelf's top face (see SBCMicroRack), or the base's
+        pcb = max(floor, k * hp + 15 - 8 - 1.6)       # the 16 mm USB stacks centred in the port hole
+        top = pcb + 1.6
+        if pcb > floor:
+            add("brass", [h.buffer(2.5, quad_segs=6) for h in holes], floor, pcb)
+        board = rect(x0, y0, x1, y1).buffer(-3).buffer(3, quad_segs=4)
+        add("pcb", [board.difference(unary_union([h.buffer(1.35, quad_segs=6) for h in holes]))], pcb, top)
+        add("steel", [rect(x1 - 21, y0 + 2.25, x1 + 2, y0 + 18.25)], top, top + 13.5)
+        add("steel", [rect(x1 - 17, y0 + c - 6.6, x1 + 2, y0 + c + 6.6) for c in (29, 47)], top, top + 16)
+        add("steel", [rect(x0 + 18.5, y0 + 24.5, x0 + 33.5, y0 + 39.5)], top, top + 2.4)
+        add("tin", [rect(x0 + 38, y0 + 25, x0 + 48, y0 + 39)], top, top + 1.2)
+        add("tin", [rect(hx + 3.5, y1 - 6, hx + 54.5, y1 - 1)], top, top + 8.5)
+    return out
 
 
 @recipe
@@ -3116,7 +3149,8 @@ def StackableBin(box, parts):
     """One compartment row of BinTray standing on stackable feet: sides (u = Y from the open front,
     v = Z), the back at Y = d, the bottom drawn from the back, the retainer leaning out at 45° from
     its front edge, dividers between the compartments. The stackable edges' stabilizer strips are
-    glued inside their walls on the bottom, as in Crate; the optional label strip is left out."""
+    glued inside their walls on the bottom, as in Crate (the optional label strip is not drawn, see
+    bundle-runtime.sh)."""
     t, sx, d, h = box.thickness, box.sx, box.d, box.h
     x = sum(sx) + t * (len(sx) - 1)
     walls = {  # wall: (its placement, its strip's: corner, along, side, length)
@@ -3166,8 +3200,9 @@ def StorageShelf(box, parts):
     right one drawn from the back), the back at Y = x, the floor, top and inner horizontals drawn
     from the front (the horizontals' slots, sy reversed, are at their v = 0 at X = W), the inner
     verticals from the back, and the retainers standing on each level's front edge. A lid style's
-    tops lie on the walls, their u along the depth (as drawLid draws them, x × y); the v edge's
-    hinge parts are left out."""
+    tops lie on the walls, their u across (drawLid draws them y × x, see bundle-runtime.sh), the
+    edge meeting the back's (hinge, slide-in groove) at the back; the v edge's hinge parts are
+    left out."""
     t, sy, sh, x = box.thickness, box.sy, box.sh, box.x
     W = sum(sy) + t * (len(sy) - 1)
     h = sum(sh) + t * (len(sh) - 1)
@@ -3177,7 +3212,7 @@ def StorageShelf(box, parts):
         "left": Placement((0, 0, 0), Y, Z, -1),
         "right": Placement((W, x, 0), back, Z, -1),
         "bottom": Placement((0, 0, 0), Y, X, 1),
-        "top": Placement((0, 0, h), Y, X, -1, lid=box.top_edge == "c"),
+        "top": Placement((0, 0, h), X, Y, 1, lid=True) if box.top_edge == "c" else Placement((0, 0, h), Y, X, -1),
         "back": Placement((0, x, 0), X, Z, -1),
     }
     for i in range(1, len(sh)):
@@ -3186,9 +3221,10 @@ def StorageShelf(box, parts):
         place[f"inner vertical {i + 1}"] = Placement((sum(sy[:i + 1]) + i * t, x, 0), back, Z, -1)
     for i, z in enumerate(levels):
         place[f"retainer {i + 1}"] = Placement((0, 0, z), X, Z, 1)
-    at = lambda z: Placement((0, 0, z), Y, X, -1, lid=True)
-    lids = {"E": [at(h + t), at(h)], "i": [at(h)], "L": [at(h)], "k": [at(h), Placement((0, x, h), back, X, 1, lid=True)],
-            "v": [Placement((W, x, h), back, (-1, 0, 0), -1, lid=True)]}.get(box.top_edge, [])
+    at = lambda z: Placement((0, 0, z), X, Y, 1, lid=True)
+    lids = {"E": [at(h + t), at(h)], "i": [Placement((0, x, h), X, back, -1, lid=True)], "L": [at(h)],
+            "k": [at(h), Placement((W, 0, h), (-1, 0, 0), Y, -1, lid=True)],
+            "v": [Placement((W, x, h), (-1, 0, 0), back, 1, lid=True)]}.get(box.top_edge, [])
     labels = [p.record.label for p in parts]
     first = max(i for i, l in enumerate(labels) if l in ("left", "right", "bottom") or (l or "").startswith("inner horizontal")) + 1
     out = [(p, place[p.record.label]) for p in parts if p.record.label in place]

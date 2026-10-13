@@ -13,6 +13,10 @@ git init -q "$src" && git -C "$src" fetch -q --depth 1 https://github.com/floria
 git -C "$src" checkout -q FETCH_HEAD
 # Upstream typo: NotesHolder with opening 0 never sets front_edge.
 sed -i '' 's/font_edge = back_edge/front_edge = back_edge/' "$src/boxes/generators/notesholder.py"
+# StackableBin: no optional label strip (it has nowhere to go).
+sed -i '' '/label="for label (optional)"/d' "$src/boxes/generators/stackablebin.py"
+# StorageShelf's x is the depth: the lid is y wide, so its back edge (hinge, slide-in…) meets the back.
+sed -i '' 's/self.drawLid(x, y, self.top_edge)/self.drawLid(y, x, self.top_edge)/' "$src/boxes/generators/storageshelf.py"
 
 uv python install "$PY_VERSION"
 cp -R "$(dirname "$(dirname "$(uv python find --managed-python "$PY_VERSION")")")" Runtime/python
