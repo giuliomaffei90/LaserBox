@@ -64,20 +64,13 @@ pezzi di test, pezzi e campioni, "Varie"), le decorazioni e l'esploso. Per ognun
   alto; con `sh` uniforme non si nota.
 - **StorageShelf**: i ripiani interni hanno le fessure con `sy` invertito: li ho girati perché
   combacino con i divisori.
-- **StorageShelf** con un coperchio (`v`, `L`, `i`, `k`, `c`, `E`): il generatore disegnava il
-  coperchio con larghezza e profondità scambiate, quindi il bordo che si unisce al retro (asole
-  della cerniera `v`, scanalatura di `L` e `i`) finiva su un fianco. Corretto nella generazione
-  (`scripts/bundle-runtime.sh` passa `y, x` a `drawLid`) e nel 3D. Da verificare tagliando: la
-  cerniera `v` ora combacia con le asole del retro.
-- **StorageShelf** con coperchio `v`: i pezzi della cerniera ora sono nel 3D, come in HingeBox. L'asse
-  è ricavato dalle tacche: uno spessore sopra il retro, sulla sua faccia esterna (cioè sul filo
-  superiore del coperchio). I pezzi del retro (asole pari) scendono e infilano la linguetta nel retro,
-  quelli del coperchio (dispari) la infilano dall'alto nel coperchio. Lo stile `outside` delle
-  cerniere non è montato (pezzi lasciati fuori). Se lo scaffale è più stretto di una cerniera, il
-  generatore non disegna né le cerniere né il bordo del retro e del coperchio (pezzi rotti).
-- **SpicesRack** con i piedi: il generatore tagliava comunque anche i supporti della fila più bassa,
-  che finiscono negli stessi incastri dei piedi. Ora non li disegna più
-  (`scripts/bundle-runtime.sh`).
+- **StorageShelf** con un coperchio (`v`, `L`, `i`, `k`, `c`, `E`): ho girato il coperchio nella
+  generazione (`scripts/bundle-runtime.sh` passa `y, x` a `drawLid`) perché si unisse al retro; da
+  verificare su un pezzo tagliato.
+- **StorageShelf** con coperchio `v`: l'asse della cerniera è ricavato dalle tacche (uno spessore sopra
+  il retro, sulla sua faccia esterna). Le cerniere in stile `outside` non sono montate. Se lo scaffale
+  è più stretto di una cerniera il generatore non disegna né le cerniere né il bordo del retro e del
+  coperchio (pezzi rotti).
 - **WallPliersHolder**: i rinforzi interni sono centrati dove il generatore mette i fori, mezzo
   spessore fuori dal confine tra gli scomparti.
 - **SevenSegmentPattern**: il secondo separatore è disegnato 0,8 mm più corto dei suoi fori; l'ho
