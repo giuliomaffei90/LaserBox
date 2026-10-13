@@ -3,9 +3,13 @@
 Units are millimetres of the real object. All panels are plywood of thickness T.
 Axes: x to the right, y towards the back, z up. The camera looks from the front-left-top.
 """
+import json
 import math
+import os
+import subprocess
 import bpy
-from mathutils import Vector
+import bmesh
+from mathutils import Matrix, Vector
 
 T = 3.0  # material thickness used by every model
 
@@ -338,3 +342,41 @@ def render(path, elevation=35.264, azimuth=45, margin=1.12):
 
     scene.render.filepath = path
     bpy.ops.render.render(write_still=True)
+
+
+def pieces(pieces, color=WOOD):
+    """The app's assembled pieces (assembly.py's protocol): each ring set extruded by t and placed."""
+    for piece in pieces:
+        bm = bmesh.new()
+        edges = []
+        for ring in piece["rings"]:
+            verts = [bm.verts.new((u, v, 0)) for u, v in ring]
+            edges += [bm.edges.new((verts[i], verts[(i + 1) % len(verts)])) for i in range(len(verts))]
+        bmesh.ops.triangle_fill(bm, use_beauty=True, use_dissolve=False, edges=edges)
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+        geom = bmesh.ops.extrude_face_region(bm, geom=bm.faces[:])
+        top = [v for v in geom["geom"] if isinstance(v, bmesh.types.BMVert)]
+        bmesh.ops.translate(bm, verts=top, vec=(0, 0, piece["t"]))
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+        mesh = bpy.data.meshes.new("piece")
+        bm.to_mesh(mesh)
+        obj = bpy.data.objects.new("piece", mesh)
+        bpy.context.collection.objects.link(obj)
+        obj.data.materials.append(material(color))
+        U, V = Vector(piece["u"]), Vector(piece["v"])
+        N = U.cross(V) * piece["side"]
+        obj.matrix_world = Matrix(((U.x, V.x, N.x, piece["origin"][0]),
+                                   (U.y, V.y, N.y, piece["origin"][1]),
+                                   (U.z, V.z, N.z, piece["origin"][2]),
+                                   (0, 0, 0, 1)))
+
+
+def assembled(name, args=None):
+    """The generator as the app's 3D view assembles it (its decorations left out), from the bundled
+    Python in Runtime/: for an object easier to show as built than to model."""
+    root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
+    code = ("import json, sys; sys.path.insert(0, 'LaserBox'); import bridge; "
+            "print(json.dumps(bridge.handle({'cmd': 'assemble', 'name': sys.argv[1], 'args': json.loads(sys.argv[2])})))")
+    out = subprocess.run([os.path.join(root, "Runtime/python/bin/python3"), "-s", "-B", "-c", code, name, json.dumps(args or {})],
+                         cwd=root, env={"PYTHONPATH": os.path.join(root, "Runtime/site")}, capture_output=True, text=True, check=True)
+    pieces([p for p in json.loads(out.stdout.splitlines()[-1])["pieces"] if "decoration" not in p])

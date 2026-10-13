@@ -328,12 +328,8 @@ def CanStorage():
 
 @model
 def CarbonFilter():
-    # An activated-carbon cassette: a flat frame, the carbon fill sandwiched behind a perforated face.
-    W, D, H = 200, 150, 40
-    open_box(0, 0, 0, W, D, H, bottom=False)
-    box(T, T, 1, W - 2 * T, D - 2 * T, H - 4, DARK)         # the carbon
-    face = floor(0, 0, H, W, D)
-    round_holes(face, [(25 + i * 30, 22 + j * 35, H) for i in range(6) for j in range(4)], 9)
+    # The V-shaped filter pockets between their end plates: shown as the app assembles them.
+    assembled("CarbonFilter")
 
 
 @model

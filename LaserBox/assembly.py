@@ -6569,8 +6569,9 @@ def AirPurifier(box, parts):
     return out
 
 
-def _airpurifier_fan_spots(box, n, h, l):
-    """The fans' centres on a wall h high, l long, as fanCB lays them out."""
+def _airpurifier_fan_spots(box, n, h, l, frames=True):
+    """The fans' centres on a wall h high, l long, as fanCB lays them out (the "top" wall, no frame
+    holes, has them in its middle: see bundle-runtime.sh)."""
     t, fh, d = box.thickness, box.filter_height, box.fan_diameter
     sides = box.fan_width if ((box.fans_left or box.fans_right) and (box.fans_top or box.fans_bottom)) else 10
     max_n = int((l - 2 * sides) // (d + 10))
@@ -6578,9 +6579,7 @@ def _airpurifier_fan_spots(box, n, h, l):
     if n <= 0:
         return []
     w = (l - 2 * sides) / n
-    posy = h / 2 if box.filters == 2 else (h + t + fh) / 2
-    if posy + d / 2 > h + 1:  # one filter: the "top" wall's holes run off its edge, no fan fits there
-        return []
+    posy = h / 2 if box.filters == 2 or not frames else (h + t + fh) / 2
     return [(sides + w / 2 + i * w, posy) for i in range(n)]
 
 
@@ -6589,10 +6588,10 @@ def _airpurifier_fans(box):
     """A fan inside each wall's fan hole, fan_width deep against the wall's inner face: its frame
     with the bore and a hub with seven blades."""
     d, depth, out = box.fan_diameter, box.fan_width, []
-    for place, n, h, l in _airpurifier_walls(box):
+    for k, (place, n, h, l) in enumerate(_airpurifier_walls(box)):
         inward = tuple(-place.side * c for c in _cross(place.U, place.V))
         at = Placement(_add(place.origin, inward, depth), place.U, place.V, place.side)
-        for cx, cy in _airpurifier_fan_spots(box, n, h, l):
+        for cx, cy in _airpurifier_fan_spots(box, n, h, l, frames=k > 0):
             r = 0.47 * d
             frame = rect(cx - d / 2, cy - d / 2, cx + d / 2, cy + d / 2).difference(Point(cx, cy).buffer(r, quad_segs=24))
             blades = [Polygon([(cx + rr * math.cos(math.radians(a + da)), cy + rr * math.sin(math.radians(a + da)))

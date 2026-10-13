@@ -18,7 +18,6 @@ pezzi di test, pezzi e campioni, "Varie"), le decorazioni e l'esploso. Per ognun
   collegamento tra un segmento e l'altro.
 - **Planetary** con `deltateeth`: la seconda corona e i suoi satelliti stanno nello strato sopra,
   sulle stesse posizioni, senza calcolarne l'ingranamento.
-- **Pulley**: il generatore disegna un solo bordo (`top`), che metto sopra; sotto non c'è.
 - **SkadisStand**: il generatore disegna un solo piede, il pannello ne vuole due: ne mostro uno.
 - **OttoBody**: i due PCB_Clamp, il PCB_Clip e la piastrina 15×15 del pulsante sono lasciati fuori: non hanno incastri né fori corrispondenti nel corpo, quindi non si sa dove vanno (probabilmente tengono l'Arduino nella testa).
 - **PhotoFrame**: la "Photo" che il generatore disegna è solo una sagoma (niente da tagliare): non è piazzata come parte, la foto è mostrata come decorazione di carta. Il vetro non è mostrato (non è tagliato e non c'è un tipo di decorazione per il vetro).
@@ -61,9 +60,6 @@ pezzi di test, pezzi e campioni, "Varie"), le decorazioni e l'esploso. Per ognun
   coperchio (pezzi rotti).
 - **WallPliersHolder**: i rinforzi interni sono centrati dove il generatore mette i fori, mezzo
   spessore fuori dal confine tra gli scomparti.
-- **FanHole**: i bracci della girandola restano aperti di 0,34 mm (diametro 80): li chiudo come fori.
-  Con diametri piccoli (40 mm, 10 bracci) i bracci del generatore si incrociano e alcuni fori si
-  fondono.
 - **RobotArm**: con i valori predefiniti il generatore non disegna nulla. Ho messo come predefiniti
   dell'app due segmenti (Mm e Mu): cambia anche il disegno 2D.
 - **DisplayShelf** con angolo negativo: i divisori, perpendicolari al ripiano inclinato,
@@ -80,7 +76,6 @@ pezzi di test, pezzi e campioni, "Varie"), le decorazioni e l'esploso. Per ognun
 - **OttoBody**: il foro da 2 mm del supporto servo destro (per l'interruttore) cade per metà fuori dal pezzo (il pezzo è lungo y - 5.6, il foro è a y - 5): il dischetto staccato è scartato.
 - **CanStorage**: con top_edge "e" il FrontEdge comincia con un salto (moveTo), quindi il contorno dei fianchi resta aperto (due tagli aperti) e il pezzo sparirebbe. Ho chiuso il contorno a mano: il bordo superiore tagliato dove comincia il fronte, poi il fronte (passato come `plate=`). Verificare che la forma sia quella attesa.
 - **CarbonFilter**: le costole esterne (outerRibs) hanno il contorno non chiuso per uno scarto di 0,3–1,2 mm che cresce con l'angolo a (con x=550, h=250, 3 tasche si chiude, con 2 tasche o x diversi no), e la riga di costole deriva leggermente. Le ho chiuse io (Polygon + buffer(0)) e passate come `plate=` con `keep` che scarta tutto: funziona, ma così `piece_roles` le salta (niente ruolo per le etichette).
-- **CarbonFilter**: `Runtime/samples/CarbonFilter.png` mostra una scatola con un coperchio a fori tondi, che non c'entra con questo filtro: l'illustrazione di esempio sembra sbagliata.
 - **AgricolaInsert**: il distanziale basso del vassoio delle carte sta a 0,15 mm dalla parete a pettine (i fori sono a spacer_spacing − t/2 con spacer_spacing = larghezza − 99,8 = 3,15): l'ho messo lì, quasi a contatto.
 - **AgricolaInsert**: la parete inclinata del vassoio delle carte non tocca il piano (il centro dei fori parte a sin·t/2): il piede resta sollevato di circa mezzo millimetro, come dice anche il commento del generatore.
 - **AgricolaInsert**: dei piedini triangolari dei separatori mobili il generatore chiude solo il primo triangolo (il secondo condivide l'ipotenusa e resta un taglio aperto): ho usato lo stesso triangolo due volte, uno per lato.
@@ -95,8 +90,12 @@ pezzi di test, pezzi e campioni, "Varie"), le decorazioni e l'esploso. Per ognun
 - **Clock**: le tacche della gamba posteriore sono larghe t − burn ma i ripiani sono spessi t: incastro forzato, mostrato centrato.
 - **PizzaShovel**: `gripCB(top=True)` va alla traversa da 40, che però i fori dei fianchi mettono in basso, accanto alla pala; quella da 80 (top=False) va in alto. Ho seguito i fori (come nella foto).
 - **MagazineFile**: i due fianchi sono disegnati nello stesso pezzo, il secondo dopo un `moveTo(y + 15, h + hi + 15, 180)` (girato di mezzo giro). Li ho separati ricostruendo quella trasformazione: se il generatore cambia l'ordine o gli spostamenti, il secondo fianco va fuori posto.
+- **Guida DIN** (tutti i 16 generatori da parete, `walltype` dinrail): il gancio (`DinRailEdge`,
+  sezione 0) finisce 1 mm dentro il pezzo rispetto a dove comincia, quindi il resto del bordo corre
+  1 mm più in dentro e il contorno del pezzo resta aperto di 1 mm (0,9 in WallCaliper e WallHook):
+  tagliato non si stacca dal foglio, e nel 3D quei pezzi spariscono. Non corretto: per chiuderlo va
+  scelto quale tratto del gancio è sbagliato (l'ultimo ".5" in salita, o il dente lungo d − 4).
 - **AirPurifier**: la parete che il generatore chiama "top" è alta d, ma lo spazio tra i due telai interni (o, con un filtro, tra il telaio e la piastra di chiusura) è d + 2: l'ho messa 1 mm sopra il telaio inferiore (due filtri) o contro la piastra di chiusura (un filtro).
-- **AirPurifier**: con un solo filtro i fori dei ventilatori della parete "top" sono centrati a (d + t + fh)/2 su una parete alta d, quindi escono dal suo bordo: lì non metto ventilatori nella decorazione.
 - **Ramp**: tra la cima della parete verticale e la diagonale resta un piccolo cuneo vuoto (la diagonale arriva al filo esterno della parete verticale, t/cos a oltre lo spigolo interno); al piede la diagonale scende fino a terra davanti al fondo. Come da generatore.
 - **CoinBankSafe**: il foro della cerniera del coperchio è disegnato dal secondo callback, cioè all'inizio del bordo destro (vicino a u = y), mentre quello del fondo è vicino a u = 0: ho girato il coperchio sottosopra perché i due fori stiano uno sopra l'altro.
 - **CoinBankSafe**: la maniglia è una pinna piena (1,5t × 8t con la linguetta nella fessura dello sportello), senza foro per le dita: così la disegna il generatore.
@@ -121,9 +120,8 @@ pezzi di test, pezzi e campioni, "Varie"), le decorazioni e l'esploso. Per ognun
   lontano dal muro, così trattiene l'asse quando si tira la carta. Il tassello ora è lungo quanto `width`, fra i bracci (prima li attraversava).
 - **RollHolder** (unisce RollHolder e WallRollHolder di boxes.py, `bridge.RollHolder`): con il tipo
   di parete "avvitato al muro" disegna il RollHolder originale, con gli altri il WallRollHolder.
-  `screw_holes` e `one_piece` contano solo avvitato. Con la guida DIN il contorno del braccio
-  disegnato dal generatore resta aperto di 1 mm (non si staccherebbe dal foglio) e nel 3D i bracci
-  non compaiono: non corretto.
+  `screw_holes` e `one_piece` contano solo avvitato. Con la guida DIN i bracci non compaiono nel
+  3D: vedi il punto sulla guida DIN tra le incongruenze del generatore.
 - **WallSlottedHolder / WallChiselHolder / RollHolder**: i triangoli di rinforzo sono disegnati
   annidati in un unico pezzo; li separo riconoscendoli dagli ingombri. Funziona con tutti i tipi di
   muro provati, ma è euristico.
@@ -374,5 +372,4 @@ pezzi di test, pezzi e campioni, "Varie"), le decorazioni e l'esploso. Per ognun
 - Modelli da parete e DrillStand: compilati, avviati e pushati; da provare nell'app.
 - Motivi di fori e pezzi di test (nuova categoria "Test", ultima): compilati e avviati; da provare nell'app.
 - Pezzi e campioni: compilati e avviati; da provare nell'app.
-- "Varie" (53 modelli): compilati e avviati; da provare nell'app. LaptopStand è girato di 25° nella
-  galleria (TURN) perché un triangolo non si veda di taglio: verificare il verso.
+- "Varie" (53 modelli): compilati e avviati; da provare nell'app.
