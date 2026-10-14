@@ -18,7 +18,7 @@ No names renders every model. The app looks for `Runtime/samples/<Name>.png` (se
   parameters for the proportions (read `__init__` / `buildArgParser` in
   `Runtime/site/boxes/generators/<module>.py`), rounded freely. What matters is that someone
   recognises the object and understands its shape at 200 px, not accuracy.
-- Reference: the photo `Runtime/samples/<Name>.jpg` (when it exists) shows the real thing; the
+- Reference: the photo `static/samples/<Name>.jpg` in the boxes.py repository (when it exists) shows the real thing; the
   class docstring and `description` say what it is for. Look at the photo before modelling.
 - Model only what is visible: outer walls, lids, dividers, the characteristic cut-outs. Skip
   screws, hinges' internals, labels, tiny holes. A lid is usually shown lifted 20–30 mm above the

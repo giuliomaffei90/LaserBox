@@ -101,12 +101,12 @@
         }
       }
     },
-    "All Boxes": {
+    "All": {
       "localizations": {
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tutte le scatole"
+            "value": "Tutti"
           }
         }
       }
@@ -487,16 +487,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "MDF"
-          }
-        }
-      }
-    },
-    "Made by someone": {
-      "localizations": {
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Realizzata da qualcuno"
           }
         }
       }

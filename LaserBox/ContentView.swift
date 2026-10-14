@@ -14,7 +14,7 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: $columns) {
             List(selection: $category) {
-                Label("All Boxes", systemImage: "square.grid.2x2")
+                Label("All", systemImage: "square.grid.2x2")
                     .tag(Category.all)
                 Section("Categories") {
                     ForEach(model.groups) { group in
@@ -76,7 +76,7 @@ struct GalleryView: View {
 
     private var title: String {
         if case .group(let name) = category, let group = model.groups.first(where: { $0.name == name }) { return group.title }
-        return String(localized: "All Boxes")
+        return String(localized: "All")
     }
 
     var body: some View {
@@ -200,28 +200,17 @@ struct GeneratorCard: View {
     }
 }
 
-/// The isometric illustration of a box; the web site's photo or the default drawing as fallbacks.
+/// The isometric illustration of a box.
 struct SampleImage: View {
     let name: String
-    var photo = false  // true shows the real photo instead, when there is one
     private static let cache = NSCache<NSString, NSImage>()
     private static let folder = Bundle.main.resourceURL!.appending(path: "Runtime/samples")
 
-    static func hasPhoto(_ name: String) -> Bool { image("\(name).jpg") != nil }
-
     var body: some View {
-        if photo, let photo = Self.image("\(name).jpg") {
-            Image(nsImage: photo).resizable().scaledToFill()
-        } else if let illustration = Self.image("\(name).png") {
+        if let illustration = Self.image("\(name).png") {
             Image(nsImage: illustration).resizable().scaledToFit().padding(6)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(.fill.tertiary)
-        } else if let photo = Self.image("\(name).jpg") {
-            Image(nsImage: photo).resizable().scaledToFill()
-        } else if let drawing = Self.image("\(name).svg") {
-            Image(nsImage: drawing).resizable().scaledToFit().padding(14)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(.white)
         } else {
             Image(systemName: "shippingbox").font(.largeTitle).foregroundStyle(.tertiary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

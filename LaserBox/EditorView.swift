@@ -273,7 +273,7 @@ struct ParametersForm: View {
     }
 }
 
-/// Illustration, summary, the long description from boxes.py and the web site's photo of a real one.
+/// Title, summary and the long description from boxes.py: text only, no pictures.
 struct BoxInfo: View {
     let generator: GeneratorInfo
     let html: String
@@ -281,22 +281,11 @@ struct BoxInfo: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                Color.clear
-                    .frame(height: 260)
-                    .overlay { SampleImage(name: generator.name) }
-                    .clipShape(.rect(cornerRadius: 10))
                 Text(generator.title).font(.title3.bold())
                 Text(generator.doc).foregroundStyle(.secondary)
                 if !html.isEmpty {
                     HTMLView(html: html)
                         .frame(height: 220)
-                }
-                if SampleImage.hasPhoto(generator.name) {
-                    Text("Made by someone").font(.headline).padding(.top, 4)
-                    Color.clear
-                        .frame(height: 260)
-                        .overlay { SampleImage(name: generator.name, photo: true) }
-                        .clipShape(.rect(cornerRadius: 10))
                 }
             }
             .padding()
@@ -306,7 +295,7 @@ struct BoxInfo: View {
     }
 }
 
-/// Renders the description HTML; its pictures point at Runtime/samples.
+/// Renders the description HTML.
 struct HTMLView: NSViewRepresentable {
     let html: String
 
@@ -321,10 +310,9 @@ struct HTMLView: NSViewRepresentable {
             <html><head><meta charset="utf-8"><style>
             :root { color-scheme: light dark; }
             body { font: -apple-system-body; margin: 0; }
-            img { max-width: 100%; border-radius: 8px; }
             a { color: -apple-system-control-accent; }
             </style></head><body>\(html)</body></html>
-            """, baseURL: Bundle.main.resourceURL!.appending(path: "Runtime/"))
+            """, baseURL: nil)
     }
 }
 

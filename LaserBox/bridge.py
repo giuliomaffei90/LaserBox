@@ -269,7 +269,9 @@ def generator_args(name):
             groups.append({"title": tr(group.title), "args": args, "advanced": group.title.startswith("Settings for")})
     # The generator's own settings first, then the defaults, then the edge settings.
     groups.sort(key=lambda g: g["advanced"])
-    description = markdown.markdown(tr(type(box).description), extensions=["extra"]).replace('src="static/', 'src="')
+    # The info panel shows text only: the description's pictures are left out.
+    description = markdown.markdown(tr(type(box).description), extensions=["extra"])
+    description = re.sub(r"<p>\s*<img[^>]*>\s*</p>|<img[^>]*>", "", description)
     return {**info(type(box)), "description": description, "groups": groups}
 
 
