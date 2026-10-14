@@ -43,6 +43,14 @@ targets:
             mkdir -p "$dir"
             /opt/homebrew/bin/msgfmt -o "$dir/boxes.py.mo" "$po"
           done
+    postBuildScripts:
+      - name: Install in /Applications
+        basedOnDependencyAnalysis: false
+        script: |
+          rm -rf "/Applications/$FULL_PRODUCT_NAME"
+          ditto "$TARGET_BUILD_DIR/$FULL_PRODUCT_NAME" "/Applications/$FULL_PRODUCT_NAME"
+          # Run scripts come before Xcode's own signing: sign the copy ad hoc.
+          codesign --force --deep --sign - "/Applications/$FULL_PRODUCT_NAME"
     settings:
       base:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
