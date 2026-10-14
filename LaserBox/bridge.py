@@ -24,6 +24,7 @@ import markdown
 from boxes.generators.traylayout import TrayLayoutFile
 
 import assembly
+from descriptions import DESCRIPTIONS
 from types import SimpleNamespace
 
 from affine import Affine
@@ -269,9 +270,12 @@ def generator_args(name):
             groups.append({"title": tr(group.title), "args": args, "advanced": group.title.startswith("Settings for")})
     # The generator's own settings first, then the defaults, then the edge settings.
     groups.sort(key=lambda g: g["advanced"])
-    # The info panel shows text only: the description's pictures are left out.
+    # The info panel shows text only: the description's pictures are left out. A generator whose
+    # description is missing (or only pictures) gets LaserBox's own.
     description = markdown.markdown(tr(type(box).description), extensions=["extra"])
     description = re.sub(r"<p>\s*<img[^>]*>\s*</p>|<img[^>]*>", "", description)
+    if not description.strip() and name in DESCRIPTIONS:
+        description = markdown.markdown(tr(DESCRIPTIONS[name]), extensions=["extra"])
     return {**info(type(box)), "description": description, "groups": groups}
 
 
