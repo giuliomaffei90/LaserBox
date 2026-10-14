@@ -179,7 +179,9 @@ struct GeneratorCard: View {
                         }.onEnded { _ in dragStart = nil })
                         .onTapGesture { open?() }
                     } else {
-                        SampleImage(name: generator.name)
+                        Image(systemName: "shippingbox").font(.largeTitle).foregroundStyle(.tertiary)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(.quaternary)
                     }
                 }
                 .clipShape(.rect(cornerRadius: 12))
@@ -197,31 +199,5 @@ struct GeneratorCard: View {
         .onHover { hovering in withAnimation(.snappy(duration: 0.2)) { self.hovering = hovering } }
         .accessibilityElement(children: .combine)
         .help(generator.doc)
-    }
-}
-
-/// The isometric illustration of a box.
-struct SampleImage: View {
-    let name: String
-    private static let cache = NSCache<NSString, NSImage>()
-    private static let folder = Bundle.main.resourceURL!.appending(path: "Runtime/samples")
-
-    var body: some View {
-        if let illustration = Self.image("\(name).png") {
-            Image(nsImage: illustration).resizable().scaledToFit().padding(6)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(.fill.tertiary)
-        } else {
-            Image(systemName: "shippingbox").font(.largeTitle).foregroundStyle(.tertiary)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(.quaternary)
-        }
-    }
-
-    private static func image(_ file: String) -> NSImage? {
-        if let cached = cache.object(forKey: file as NSString) { return cached }
-        guard let image = NSImage(contentsOf: folder.appending(path: file)) else { return nil }
-        cache.setObject(image, forKey: file as NSString)
-        return image
     }
 }
