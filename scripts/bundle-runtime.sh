@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Builds Runtime/: a relocatable Python with boxes.py and its dependencies, plus the gallery pictures,
+# Builds Runtime/: a relocatable Python with boxes.py and its dependencies,
 # copied into the app bundle. Needs network once; the app itself then runs offline.
 set -euo pipefail
 setopt null_glob
