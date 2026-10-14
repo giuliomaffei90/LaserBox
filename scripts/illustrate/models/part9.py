@@ -177,23 +177,6 @@ def PhotoFrame():
 
 
 @model
-def PizzaShovel():
-    w, d = 382, 400
-    floor(0, 0, 0, w, d)
-    # pusher at the front: side wedges, back wall and top, with the grip sticking out forwards
-    wedge = [(0, T), (0, 36), (70, 36), (240, T)]
-    for x in (0, w - T):
-        extrude(wedge, "yz", x, T)
-    wall_x(T, 0, T, w - 2 * T, 33)
-    floor(T, T, 33, w - 2 * T, 69)
-    f = frame((70, 36), math.degrees(math.atan2(-36 + T, 170)))
-    extrude(rect(f, 60, 63, 0, 40), "yz", T, w - 2 * T)             # pusher bar across the slope
-    grip = [(0, 5), (-240, 5)] + arc(-240, 20, 15, -90, -270, 10) + [(0, 35)]
-    sheet(grip, "yz", w / 2 - 4.5, 9)
-    return dict(azimuth=35)
-
-
-@model
 def PoleHook():
     d, ww = 50, 12
     full = ([(0, 0), (d + 2 * ww, 0), (d + 2 * ww, 2 * d)] + arc(d + 1.5 * ww, 2 * d, ww / 2, 0, 180, 6)
@@ -225,23 +208,6 @@ def Ramp():
     wall_x(T, d - T, T, w - 2 * T, 52)
     f = frame((0, 0), math.degrees(math.atan2(h, d)))
     extrude(rect(f, 0, math.hypot(d, h), 0, T), "yz", 0, w)
-
-
-@model
-def RoyalGame():
-    s = 25
-    closed_box(0, 0, 0, 200, 75, 22)
-    for x in range(8):
-        for y in range(3):
-            if x in (2, 3) and y != 1:
-                continue
-            box((x + 0.05) * s, (y + 0.05) * s, 22, 0.9 * s, 0.9 * s, 0.4, WOOD_EDGE)
-    for x in (30, 55, 80):
-        cylinder(x, -25, 0, 10, T)
-    for x in (130, 160):
-        r = s / 3 ** 0.5
-        mesh([(x + r, -30, 0), (x - r / 2, -30 + s / 2, 0), (x - r / 2, -30 - s / 2, 0), (x, -30, s * (2 / 3) ** 0.5)],
-             [[0, 2, 1], [0, 1, 3], [1, 2, 3], [2, 0, 3]])
 
 
 @model

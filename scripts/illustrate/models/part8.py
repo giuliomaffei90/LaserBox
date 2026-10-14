@@ -92,22 +92,6 @@ def Display():
 
 
 @model
-def DrillGauge():
-    w, h = 62, 200
-    plate = prism([(0, 0), (w, 0), (w, h), (0, h)], 0, T)
-    # The narrowing slot: 1 mm at the bottom, 13 mm at the rounded top.
-    cx = 44
-    slot = [(cx - 0.8, 12), (cx + 0.8, 12), (cx + 6.5, h - 24)] + arc(cx, h - 24, 6.5, 0, 180) + [(cx - 6.5, h - 24)]
-    cut(plate, slot, -1, T + 2)
-    # Three drill bits parked in the slot.
-    for z, r in ((h - 50, 5.2), (h - 110, 3.6), (h - 160, 2.2)):
-        cylinder(cx, z, -8, r, 45, GREY, segments=24)
-    # Engraved size marks left of the slot.
-    for i in range(14):
-        box(14, 16 + i * 13, T, 16, 0.8, 0.3, WOOD_EDGE)
-
-
-@model
 def DrillStand():
     x, rows, dh = 165, ((0, 13), (16, 36), (39, 69)), 15   # row y-ranges (10/20/30 deep)
     y, sh = 72, (25, 40, 60)
@@ -150,20 +134,6 @@ def FilamentSpool():
     for o in (a, b, hub):
         round_hole(o, 0, 0, zc, ra, axis="y")
     return dict(azimuth=35)
-
-
-@model
-def Folder():
-    x, y, r, R = 100, 140, 10, 12            # cover width, height, corner radius, spine radius
-    cover = [(0, 0), (x - r, 0)] + arc(x - r, r, r, 270, 360) + arc(x - r, y - r, r, 0, 90) + [(0, y)]
-    extrude(cover, "xz", 0, T)                # front cover
-    extrude(cover, "xz", 2 * R - T, T)        # back cover
-    spine = arc(0, R, R, 90, 270, 16) + arc(0, R, R - T, 270, 90, 16)
-    prism(spine, 0, y)                        # the bent (living-hinge) spine
-    for i in range(1, 8):                     # the hinge slits
-        a = math.radians(90 + 180 * i / 8)
-        box(R * math.cos(a) - 0.4, R + R * math.sin(a) - 0.4, 8, 0.8, 0.8, y - 16, WOOD_EDGE)
-    return dict(azimuth=55)
 
 
 @model
@@ -289,22 +259,6 @@ def MagazineFile():
 
 
 @model
-def MakitaPowerSupply():
-    x, y, h, zb = 85, 75, 35, 40
-    box(7, 8, 0, 71, 60, 28, DARK)                        # the Makita battery
-    panel(10, 5, 28, T, 64, zb - 28)                       # the adapter rails
-    panel(x - 10 - T, 5, 28, T, 64, zb - 28)
-    top = closed_box(0, 0, zb, x, y, h)[-1]
-    hole(top, 4.5, 30, zb + h - T - 1, 76, 40, T + 2)
-    box(4.5, 30, zb + h - T - 1.5, 76, 40, 1, DARK)        # the display module
-    box(12, 36, zb + h - T - 0.5, 36, 24, 0.4, (0.10, 0.55, 0.55, 1))
-    cylinder(70, 50, zb + h, 5, 8, GREY, segments=24)      # its knob
-    for xx, c in ((25, DARK), (45, (0.75, 0.12, 0.12, 1))):   # banana sockets
-        cylinder(xx, -8, zb + 14, 4.5, 8, c, axis="y", segments=20)
-    cylinder(66, -9, zb + 14, 2.5, 9, GREY, axis="y", segments=12)  # flip switch
-
-
-@model
 def Matrix():
     w, d = 200, 30
     front = panel(0, 0, 0, w, T, w)
@@ -335,4 +289,3 @@ def NightLightBox():
     for yy, pts in ((12, hills), (27, trees), (42, mount)):
         extrude(pts, "xz", yy, 5)
     box(8, 57, T, 159, 5, 90, (1.0, 0.95, 0.72, 1))          # the diffuser lit from behind
-

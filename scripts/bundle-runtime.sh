@@ -43,9 +43,6 @@ sed -i '' 's|help="inner depth in mm")|help="inner width of the second flange in
 perl -0pi -e 's/(            if self\.walls == "all":\n                tc -= cx\n)/$1            elif self.walls == "minimal":\n                tc -= 2 * cx\n/' "$src/boxes/generators/winerack.py"
 # SevenSegmentPattern (and Clock): the second separator as long as its finger holes (was 0.8 mm short).
 sed -i '' 's|2\*\*0.5\* x/4 - t,|2**0.5*(.55*x/2 - t) - t/2,|' "$src/boxes/generators/sevensegment.py"
-# AirPurifier with one filter: the "top" wall (d high, no frames) had its fan holes centred as on the
-# walls with a filter, off its edge; in its middle, as with two filters.
-sed -i '' 's/^            if self.filters==2:$/            if self.filters==2 or not fingerHoles:/' "$src/boxes/generators/airpurifier.py"
 # FanHole: (ri*sin a)**2 was written ri*sin(a)**2, so the swirl's arms did not close (0.3–0.5 mm).
 sed -i '' -e 's|(ri\*math.sin(math.radians(ai))\*\*2 +|((ri*math.sin(math.radians(ai)))**2 +|' -e 's|(ri\*math.sin(math.radians(ai-ao))\*\*2 +|((ri*math.sin(math.radians(ai-ao)))**2 +|' "$src/boxes/generators/fanhole.py"
 

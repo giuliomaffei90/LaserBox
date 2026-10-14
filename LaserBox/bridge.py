@@ -56,9 +56,11 @@ def _adjust_size(adjust):
 boxes.Boxes.adjustSize = _adjust_size(boxes.Boxes.adjustSize)
 
 # boxes.py's "Unstable" group (generators still being worked on) is left out.
-# Nor the Otto robot's body, legs and soles.
+# Nor the Otto robot's body, legs and soles, nor the generators the user dropped.
+DROPPED = {"AirPurifier", "PizzaShovel", "AgricolaInsert", "RoyalGame", "DrillGauge", "Folder", "MakitaPowerSupply"}
 GENERATORS = {cls.__name__: cls for cls in boxes.generators.getAllBoxGenerators().values()
-              if cls.webinterface and cls.ui_group != "Unstable" and not cls.__name__.startswith("Otto")}
+              if cls.webinterface and cls.ui_group != "Unstable" and not cls.__name__.startswith("Otto")
+              and cls.__name__ not in DROPPED}
 
 
 class RollHolder(boxes.generators.wallrollholder.WallRollHolder):
@@ -198,8 +200,6 @@ PARAMETER_NAMES = {
     ('ny', 'Number of holes in depth (Y).'): 'holes in depth',
     ('ny', 'number of gridfinity grids in Y direction'): 'grids in depth',
     ('pin', 'diameter of the pin in mm'): 'pin diameter',
-    ('r', 'radius of the corners'): 'corner radius',
-    ('rim', 'rim around the filter holding it in place (in mm)'): 'rim',
     ('sh', 'sections bottom to top in mm'): 'section heights',
     ('sx', 'sections left to right in mm'): 'compartment widths',
     ('sy', 'sections back to front in mm'): 'compartment depths',

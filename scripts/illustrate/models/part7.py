@@ -1,4 +1,4 @@
-"""Part 7: AgricolaInsert … DiceTower.  Caricatures of the assembled objects, sizes in mm."""
+"""Part 7: AllEdges … DiceTower.  Caricatures of the assembled objects, sizes in mm."""
 import math
 
 import bpy
@@ -90,37 +90,6 @@ def _glass(objs, color=(0.55, 0.80, 0.95, 0.30)):
         o.data.materials.clear()
         o.data.materials.append(mat)
     return objs
-
-
-@model
-def AgricolaInsert():
-    w, d, h = 218, 300, 35
-    open_box(0, 0, 0, w, d, h)
-    wall_y(75, T, T, d - 2 * T, h - T)
-    wall_y(150, T, T, d - 2 * T, h - T)
-    for y in (30, 80, 130, 180, 230):                       # leaning card dividers
-        slanted_panel(T, y, T, 75 - T, 10, h - T - 2)
-    for y in (75, 150, 225):
-        wall_x(75 + T, y, T, 150 - 75 - T, h - T)
-    for y in (100, 200):
-        wall_x(150 + T, y, T, w - 150 - 2 * T, h - T)
-    # a small player box standing in front
-    open_box(20, -70, 0, 55, 55, 36)
-    wall_x(20 + T, -70 + 25, T, 55 - 2 * T, 36 - T)
-
-
-@model
-def AirPurifier():
-    w, d, h = 500, 500, 210
-    parts = open_box(0, 0, 0, w, d, h)
-    front = parts[1]
-    round_holes(front, [(100, 0, h / 2), (250, 0, h / 2), (400, 0, h / 2)], 66, axis="y", length=20)
-    for x in (100, 250, 400):                               # fan grilles behind the holes
-        cylinder(x, T + 1, h / 2, 68, 2, DARK, axis="y")
-        cylinder(x, T + 0.5, h / 2, 16, 0.5, GREY, axis="y")
-    top = floor(0, 0, h - T, w, d)
-    hole(top, 30, 30, h - T - 1, w - 60, d - 60, T + 2)
-    panel(T, T, h - T - 4, w - 2 * T, d - 2 * T, 2, DARK)   # the top mesh
 
 
 @model
