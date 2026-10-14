@@ -381,7 +381,8 @@ struct SVGPreview: NSViewRepresentable {
 }
 
 /// The assembled box: every piece extruded and placed in the chosen material, plus its lids and decorations.
-/// `interactive` gives the full orbit/zoom camera; otherwise `yaw`/`pitch` turn the box.
+/// `interactive` gives the full orbit/zoom camera and lets hinged and sliding parts be dragged; otherwise
+/// `yaw`/`pitch` turn the box.
 struct AssemblyView: NSViewRepresentable {
     let assembly: Assembly
     let key: String          // changes when the geometry changes
@@ -394,7 +395,8 @@ struct AssemblyView: NSViewRepresentable {
     var pitch: CGFloat = 0
 
     func makeNSView(context: Context) -> SCNView {
-        let view = SCNView()
+        let view = JointView()
+        view.stage = interactive ? context.coordinator : nil
         view.allowsCameraControl = interactive
         view.autoenablesDefaultLighting = false
         view.antialiasingMode = .multisampling4X
@@ -424,6 +426,34 @@ struct AssemblyView: NSViewRepresentable {
     }
 
     func makeCoordinator() -> AssemblyStage { AssemblyStage() }
+}
+
+/// The editor's 3D view: dragging a hinged or sliding part moves it through its range, anywhere else
+/// turns the camera.
+final class JointView: SCNView {
+    weak var stage: AssemblyStage?
+    private var grip: (joint: Int, at: SCNVector3, mouse: CGPoint)?  // the point taken, in the joint's frame
+
+    override func mouseDown(with event: NSEvent) {
+        let p = convert(event.locationInWindow, from: nil)
+        if let stage, !stage.exploded, let hit = hitTest(p).first, let j = stage.joint(of: hit.node) {
+            grip = (j, stage.joints[j].node.convertPosition(hit.localCoordinates, from: hit.node), p)
+        } else {
+            super.mouseDown(with: event)
+        }
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let grip, let stage else { return super.mouseDragged(with: event) }
+        let p = convert(event.locationInWindow, from: nil)
+        stage.drag(grip.joint, grip: grip.at, by: CGPoint(x: p.x - grip.mouse.x, y: p.y - grip.mouse.y), in: self)
+        self.grip?.mouse = p
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        if grip == nil { super.mouseUp(with: event) }
+        grip = nil
+    }
 }
 
 /// A gallery card: a scene GalleryScenes built, only attached and turned here.
@@ -457,6 +487,7 @@ final class AssemblyStage {
     var key = ""
     var optional: [(node: SCNNode, piece: Piece)] = []  // lids and decorations, shown or hidden
     var moving: [(node: SCNNode, home: SCNVector3, away: SCNVector3?, opacity: CGFloat)] = []  // see explode
+    var joints: [(node: SCNNode, joint: Joint, value: Double)] = []  // the hinged and sliding parts' frames
     var exploded = false
     var zoom: CGFloat = 1   // how much the exploded view needs the camera to zoom out
     var size: CGFloat = 0
@@ -506,10 +537,16 @@ final class AssemblyStage {
         spin.childNodes.forEach { $0.removeFromParentNode() }
         optional = []
         let box = SCNNode()
+        joints = (assembly.joints ?? []).map { joint in
+            let node = SCNNode()
+            box.addChildNode(node)
+            return (node, joint, joint.start ?? 0)
+        }
+        joints.indices.forEach(pose)
         var built: [(SCNNode, Piece)] = []
         for piece in assembly.pieces where all || Self.shown(piece, decorations: decorations, lids: lids) {
             let node = Self.node(for: piece, material: material)
-            box.addChildNode(node)
+            (piece.joint.map { joints[$0].node } ?? box).addChildNode(node)
             built.append((node, piece))
             if piece.lid == true || piece.decoration != nil { optional.append((node, piece)) }
         }
@@ -621,13 +658,15 @@ final class AssemblyStage {
         return (away.mapValues { SCNVector3($0.x - shift.x, $0.y - shift.y, $0.z - shift.z) }, CGFloat(simd_length(hi - lo)))
     }
 
-    /// Pulls the parts apart (or puts them back), animated: decorations fade, the camera zooms out.
+    /// Pulls the parts apart (or puts them back), animated: decorations fade, the camera zooms out, the
+    /// hinged and sliding parts close first.
     func explode(_ on: Bool, animated: Bool) {
         exploded = on
         SCNTransaction.begin()
         SCNTransaction.animationDuration = animated ? 0.8 : 0
         SCNTransaction.animationTimingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
         place()
+        joints.indices.forEach(pose)
         if let cam = camera.camera {
             cam.orthographicScale *= Double(on ? zoom : 1 / zoom)
             sun.light?.orthographicScale *= on ? zoom : 1 / zoom
@@ -643,6 +682,40 @@ final class AssemblyStage {
                 node.opacity = exploded ? 0 : opacity
             }
         }
+    }
+
+    /// Puts a joint's parts where its value says; closed in the exploded view, which moves them from there.
+    private func pose(_ i: Int) {
+        let (node, joint, value) = joints[i]
+        let v = Float(exploded ? 0 : value), axis = SIMD3<Float>(joint.axis.map(Float.init))
+        if joint.kind == "hinge", let at = joint.at.map({ SIMD3<Float>($0.map(Float.init)) }) {
+            let turn = simd_quatf(angle: v * .pi / 180, axis: axis)
+            node.simdOrientation = turn
+            node.simdPosition = at - turn.act(at)
+        } else {
+            node.simdPosition = axis * v
+        }
+    }
+
+    /// The joint a piece's node moves with.
+    func joint(of node: SCNNode) -> Int? { joints.firstIndex { $0.node === node.parent } }
+
+    /// Moves joint i so that `grip` (a point of its parts, in its frame) follows the mouse, moved by `delta`
+    /// in the view: by the share of the move along the way the point goes on screen, kept within range.
+    func drag(_ i: Int, grip: SCNVector3, by delta: CGPoint, in view: SCNView) {
+        let (node, joint, value) = joints[i]
+        guard !exploded, let frame = node.parent else { return }
+        let p = node.simdConvertPosition(SIMD3<Float>(grip), to: nil)
+        let axis = frame.simdConvertVector(SIMD3<Float>(joint.axis.map(Float.init)), to: nil)
+        var step = axis   // how far p goes for one unit of value: a mm, or a degree
+        if joint.kind == "hinge", let at = joint.at {
+            step = simd_cross(axis, p - frame.simdConvertPosition(SIMD3<Float>(at.map(Float.init)), to: nil)) * .pi / 180
+        }
+        let a = view.projectPoint(SCNVector3(p)), b = view.projectPoint(SCNVector3(p + step))
+        let sx = b.x - a.x, sy = b.y - a.y, l2 = sx * sx + sy * sy
+        guard l2 > 1e-6 else { return }
+        joints[i].value = min(max(value + Double((delta.x * sx + delta.y * sy) / l2), joint.range[0]), joint.range[1])
+        pose(i)
     }
 
     func show(decorations: Bool, lids: Bool) {

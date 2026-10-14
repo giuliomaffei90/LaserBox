@@ -46,10 +46,22 @@ struct Piece: Codable {
     var decoration: String?
     var lid: Bool?
     var clear: Bool?  // always clear acrylic, whatever the material (a display case's glass)
+    var joint: Int?   // the joint (in Assembly.joints) it moves with
+}
+
+/// What moves a hinged or sliding part: "hinge" turns about `axis` through `at` (degrees, right-handed),
+/// "slide" moves along `axis` (mm), within `range` from where the pieces are placed.
+struct Joint: Codable {
+    let kind: String
+    var at: [Double]?
+    let axis: [Double]
+    let range: [Double]
+    var start: Double?
 }
 
 struct Assembly: Codable {
     let pieces: [Piece]
+    var joints: [Joint]?
     var turn: Double?  // degrees about the vertical the gallery shows it turned by
     var galleryLids: Bool?  // the gallery shows its lids (it leaves them out otherwise)
 }

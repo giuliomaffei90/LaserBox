@@ -185,7 +185,7 @@ pezzi di test, pezzi e campioni, "Varie"), le decorazioni e l'esploso. Per ognun
 - **FatBallDispenser**: il bordo esterno della base di ogni tegola è sullo spigolo superiore esterno della piastra del tetto; senza lo smusso la base entra di circa 2,5 mm nella piastra.
 - **FatBallDispenser**: lo spaziatore è alla quota del soffitto (il soffitto scorre nella sua U), la staffa sotto, con il labbro sotto il soffitto; l'apertura della U è verso sinistra (-X).
 - **Kamishibai**: i pannelli laterali sono a X -3t..-2t (seguendo i fori L del fondo), con le due piastre interne dietro (X -2t..0) e un piolo in ogni foro; le strisce delle profondità extra a X -t..0. Il primo pezzo disegnato di ogni coppia va a destra (simmetrici).
-- **Kamishibai**: le due ante sono aperte di 100° (KAMISHIBAI_DOORS_OPEN) attorno ai perni negli occhi della cerniera dei piani; l'asse del perno è ricavato dal contorno dell'anta.
+- **Kamishibai**: le due ante si aprono attorno ai perni negli occhi della cerniera dei piani (all'inizio aperte di 100°, KAMISHIBAI_DOORS_OPEN); l'asse del perno è ricavato dal contorno dell'anta.
 - **Kamishibai**: ordine e orientamento dei dischi delle serrature ricavati dalle istruzioni: pomello ed esterno ruotati di un quarto perché i fori laterali si allineino con quelli dell'anta; il lato tondo del disco interno sopra l'anta destra; il lato tondo dei "locker" verso le strisce. I dischi tagliati dall'anta sono ricavati dal contorno del foro (i quadrati magenta non sono tagli, quindi sono dischi pieni).
 - **Kamishibai**: la chiave è appesa al piolo sul pannello posteriore tramite il suo foro.
 - **Kamishibai**: la ricetta lavora con Z = 0 sulla faccia superiore del fondo e alla fine alza tutto di t, così l'oggetto appoggia a terra.
@@ -273,6 +273,15 @@ pezzi di test, pezzi e campioni, "Varie"), le decorazioni e l'esploso. Per ognun
 - **PhoneHolder**: un telefono ("lcd", phone_width × phone_height × phone_depth) appoggiato sul frontale, il fondo bottom_margin più su lungo il frontale, nei ganci dei supporti.
 - **Atreus21**: su ogni foro del keyholder la parte superiore dell'interruttore (14,6 mm, alta 6) e un tasto alto 8 mm (18 mm, gradino a 15 mm), come per il Keypad. Niente viti agli angoli né microcontrollore.
 - **DiceTower**: due dadi da 16 mm davanti alla torre, sulla vaschetta (o sul piano se manca), a distanze inventate.
+
+## Parti mobili (trascinabili nella vista 3D)
+
+- **Corse inventate**: il generatore non dice fin dove si apre una cerniera o scorre un coperchio. Ho messo: HingeBox e StorageShelf (cerniere da mobile) 0–120°; IntegratedHingeBox, DiceBox, PirateChest (cerniera a baule) e NightLightBox 0–110°; SideHingeBox 0–100°; CoinBankSafe 0–90°; ante del Kamishibai 0–180°; coperchi scorrevoli (SlidingLidBox, CardBox, CompartmentBox) fuori per l'80 % della scatola; cassetto dello SlidingDrawer fuori per l'80 % della sua lunghezza. Non controllo le collisioni: verificare dove ogni pezzo si fermerebbe davvero.
+- **SideHingeBox**: si apre il guscio esterno (coperchio e i tre fianchi esterni) attorno ai perni, alzando il lato verso il fianco pieno D; il vassoio interno resta fermo. Il fianco esterno B, oltre l'asse, scende: verificare che non entri nel vassoio.
+- **Trascinamento**: il pezzo segue la proiezione del mouse lungo il suo moto sullo schermo; vicino all'asse di una cerniera (dove il punto preso si muove poco) il gesto è molto sensibile. Nell'esploso le parti mobili tornano chiuse e non si trascinano.
+- **Non trascinabili, coperchi con cerniera di un top_edge**: UniversalBox, BasedBox, AngledBox, RegularBox e ABox con cerniere "i", "j", "k" (occhi a un capo o a entrambi, coperchio in due metà) o "v", e StorageShelf con "i" o "k": l'asse dipende dallo stile della cerniera (outset, flush) e dal lato, non l'ho ricavato.
+- **Non trascinabili, flessibili**: FlexBox, FlexBox2–5, HeartBox, FlexBook (il coperchio è unito alla parete dal flessibile che si piega), BreadBox, ShutterBox, DoubleFlexDoorBox (serrande che scorrono su binari curvi): servirebbe piegare le strisce durante il movimento, non solo ruotarle.
+- **Non trascinabili, meccanismi**: ingranaggi (Gears, GearBox, Planetary) che dovrebbero girare accoppiati, Linkage (quadrilatero articolato), Pulley, LaserClamp, RobotArm, i coperchi a baionetta (BayonetBox, RegularBox) che ruotano e si sollevano, i dischi della combinazione del CoinBankSafe e le serrature del Kamishibai, i chiavistelli di Console2 / SideDoorHousing.
 
 ## Esploso
 
