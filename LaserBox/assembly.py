@@ -3186,14 +3186,12 @@ def StorageRack(box, parts):
     """Open at the front (Y = 0): the sides (the second drawn from the back), the back at Y = d, and
     at each level between the compartments sh a pair of rails along the sides (the second from the
     back). The two full floors close the bottom and the top; with an e edge there, the floor is
-    the first (last) level's instead, across the back. A plain stackable top (S) holds no floor."""
+    the first (last) level's instead, across the back."""
     t, sh, x, d, b, e = box.thickness, box.sh, box.x, box.depth, box.bottom_edge, box.top_edge
     h = sum(sh) + t * (len(sh) - 1)
     levels = [sum(sh[:i + 1]) + (i + 1) * t for i in range(len(sh) - 1)]   # the top faces
     floors = [Placement((0, 0, levels.pop(0) if b == "e" else 0), Y, X, 1),
               Placement((0, 0, levels.pop() if e == "e" else h), Y, X, 1 if e == "e" else -1)]
-    if e == "S":
-        floors.pop()
     rails = [q for z in levels for q in (Placement((0, 0, z), Y, X, 1), Placement((x, d, z), (0, -1, 0), (-1, 0, 0), 1))]
     out = list(zip(parts[:2], [Placement((0, 0, 0), Y, Z, -1), Placement((x, d, 0), (0, -1, 0), Z, -1)]))
     out += list(zip(parts[2:4], floors)) + list(zip(parts[4:-1], rails))

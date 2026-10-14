@@ -13312,6 +13312,10 @@ msgstr "Impostazioni scaffale per contenitori"
 msgid "depth of the rack"
 msgstr "profondità dello scaffale"
 
+#. help for parameter rail (StorageRack, see bundle-runtime.sh)
+msgid "depth of the rails in mm"
+msgstr "profondità delle guide in mm"
+
 #. name of box generator
 #: boxes/generators/storageshelf.py
 msgid "StorageShelf"

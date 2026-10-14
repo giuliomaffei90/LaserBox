@@ -15,6 +15,11 @@ git -C "$src" checkout -q FETCH_HEAD
 sed -i '' 's/font_edge = back_edge/front_edge = back_edge/' "$src/boxes/generators/notesholder.py"
 # StackableBin: no optional label strip (it has nowhere to go).
 sed -i '' '/label="for label (optional)"/d' "$src/boxes/generators/stackablebin.py"
+# StorageRack: a plain stackable top (S) has nothing for the second full floor to sit in; Š is the
+# stackable top with finger holes for it.
+sed -i '' 's/"FheSŠ"/"FheŠ"/g' "$src/boxes/generators/storagerack.py"
+# … and its rails' help said "depth of the rack" too.
+perl -0pi -e 's/("--rail",.*\n\s*)help="depth of the rack"/$1help="depth of the rails in mm"/' "$src/boxes/generators/storagerack.py"
 # StorageShelf's x is the depth: the lid is y wide, so its back edge (hinge, slide-in…) meets the back.
 sed -i '' 's/self.drawLid(x, y, self.top_edge)/self.drawLid(y, x, self.top_edge)/' "$src/boxes/generators/storageshelf.py"
 # SpicesRack: the feet take the bottom row's supports' holes, so that row's supports are not cut.
