@@ -5,7 +5,7 @@ pezzi di test, pezzi e campioni, "Varie"), le decorazioni e l'esploso. Per ognun
 
 ## Pezzi lasciati fuori
 
-- **FrontPanel**: i fori fuori da ogni `outline` non sono mostrati; senza `outline` il 3D è vuoto.
+- **FrontPanel**: un foro messo fuori dal suo pannello (X o Y oltre larghezza o altezza) non è mostrato nel 3D.
 - **Gears**: la dima coi due fori all'interasse (e il testo con le misure) non ha contorno: non c'è.
 - **NemaMount**: i fori per le dita disegnati per ultimi, da tagliare in una piastra propria su cui
   fissare la staffa, non sono mostrati.

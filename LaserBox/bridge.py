@@ -251,6 +251,8 @@ def describe(action, prefix, generator):
     elif action.choices:
         arg.update(kind="choice", choices=[{"value": str(c), "label": tr(c) if isinstance(c, str) else str(c)}
                                            for c in action.choices])
+    elif generator == "FrontPanel" and action.dest == "layout":
+        arg.update(kind="panels")  # edited as panels and holes (FrontPanelEditor.swift)
     elif isinstance(action.default, str) and "\n" in action.default:
         arg.update(kind="multiline")
     else:

@@ -216,10 +216,14 @@ struct ParametersForm: View {
                         } set: {
                             if $0 { expanded.insert(group.id) } else { expanded.remove(group.id) }
                         }) {
-                            rows(group)
+                            rows(group.args)
                         }
                     } else {
-                        Section(group.title) { rows(group) }
+                        let plain = group.args.filter { $0.kind != "panels" }
+                        if !plain.isEmpty { Section(group.title) { rows(plain) } }
+                        ForEach(group.args.filter { $0.kind == "panels" }) { arg in
+                            FrontPanelSections(text: Binding { model.value(arg) } set: { model.set($0, for: arg) })
+                        }
                     }
                 }
                 Section {
@@ -235,8 +239,8 @@ struct ParametersForm: View {
         }
     }
 
-    private func rows(_ group: ArgGroup) -> some View {
-        ForEach(group.args) { arg in
+    private func rows(_ args: [Arg]) -> some View {
+        ForEach(args) { arg in
             let text = Binding { model.value(arg) } set: { model.set($0, for: arg) }
             switch arg.kind {
             case "bool":

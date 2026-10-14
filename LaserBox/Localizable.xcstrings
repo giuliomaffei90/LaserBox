@@ -71,12 +71,52 @@
         }
       }
     },
+    "Add Hole": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aggiungi foro"
+          }
+        }
+      }
+    },
+    "Add Panel": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aggiungi pannello"
+          }
+        }
+      }
+    },
+    "Alignment": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allineamento"
+          }
+        }
+      }
+    },
     "All Boxes": {
       "localizations": {
         "it": {
           "stringUnit": {
             "state": "translated",
             "value": "Tutte le scatole"
+          }
+        }
+      }
+    },
+    "Angle": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Angolo"
           }
         }
       }
@@ -131,6 +171,16 @@
         }
       }
     },
+    "Bottom": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In basso"
+          }
+        }
+      }
+    },
     "Can’t Draw This Box": {
       "localizations": {
         "it": {
@@ -171,6 +221,36 @@
         }
       }
     },
+    "Center": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Al centro"
+          }
+        }
+      }
+    },
+    "Centered horizontally": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Centrato in orizzontale"
+          }
+        }
+      }
+    },
+    "Centered vertically": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Centrato in verticale"
+          }
+        }
+      }
+    },
     "Cherry": {
       "localizations": {
         "it": {
@@ -197,6 +277,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Incolore"
+          }
+        }
+      }
+    },
+    "Corner radius": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Raggio degli angoli"
           }
         }
       }
@@ -301,6 +391,26 @@
         }
       }
     },
+    "Head diameter": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diametro della testa"
+          }
+        }
+      }
+    },
+    "Height": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Altezza"
+          }
+        }
+      }
+    },
     "Hide the parameters": {
       "localizations": {
         "it": {
@@ -311,12 +421,42 @@
         }
       }
     },
+    "Horizontal alignment": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allineamento orizzontale"
+          }
+        }
+      }
+    },
+    "Kind": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tipo"
+          }
+        }
+      }
+    },
     "LaserBox": {
       "localizations": {
         "it": {
           "stringUnit": {
             "state": "translated",
             "value": "LaserBox"
+          }
+        }
+      }
+    },
+    "Left": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A sinistra"
           }
         }
       }
@@ -371,6 +511,36 @@
         }
       }
     },
+    "Middle": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Al centro"
+          }
+        }
+      }
+    },
+    "Mounting hole": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Foro di montaggio"
+          }
+        }
+      }
+    },
+    "NEMA motor": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Motore NEMA"
+          }
+        }
+      }
+    },
     "No 3D View for This Box": {
       "localizations": {
         "it": {
@@ -397,6 +567,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Arancione"
+          }
+        }
+      }
+    },
+    "Panel %lld": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pannello %lld"
           }
         }
       }
@@ -451,12 +631,52 @@
         }
       }
     },
+    "Radius": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Raggio"
+          }
+        }
+      }
+    },
+    "Rectangle": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rettangolo"
+          }
+        }
+      }
+    },
     "Red": {
       "localizations": {
         "it": {
           "stringUnit": {
             "state": "translated",
             "value": "Rosso"
+          }
+        }
+      }
+    },
+    "Remove Hole": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rimuovi foro"
+          }
+        }
+      }
+    },
+    "Remove Panel": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rimuovi pannello"
           }
         }
       }
@@ -471,6 +691,26 @@
         }
       }
     },
+    "Right": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A destra"
+          }
+        }
+      }
+    },
+    "Round hole": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Foro tondo"
+          }
+        }
+      }
+    },
     "SVG…": {
       "localizations": {
         "it": {
@@ -481,12 +721,32 @@
         }
       }
     },
+    "Screw size": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Misura della vite"
+          }
+        }
+      }
+    },
     "Search Boxes": {
       "localizations": {
         "it": {
           "stringUnit": {
             "state": "translated",
             "value": "Cerca scatole"
+          }
+        }
+      }
+    },
+    "Shaft diameter": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diametro del gambo"
           }
         }
       }
@@ -531,6 +791,16 @@
         }
       }
     },
+    "Size": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dimensione"
+          }
+        }
+      }
+    },
     "Size of the boxes in the gallery": {
       "localizations": {
         "it": {
@@ -551,12 +821,32 @@
         }
       }
     },
+    "Text": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Testo"
+          }
+        }
+      }
+    },
     "The boxes.py engine quit unexpectedly.": {
       "localizations": {
         "it": {
           "stringUnit": {
             "state": "translated",
             "value": "Il motore di boxes.py si è chiuso inaspettatamente."
+          }
+        }
+      }
+    },
+    "Top": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In alto"
           }
         }
       }
@@ -621,6 +911,16 @@
         }
       }
     },
+    "Vertical alignment": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allineamento verticale"
+          }
+        }
+      }
+    },
     "View": {
       "localizations": {
         "it": {
@@ -651,12 +951,32 @@
         }
       }
     },
+    "Width": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Larghezza"
+          }
+        }
+      }
+    },
     "Wood": {
       "localizations": {
         "it": {
           "stringUnit": {
             "state": "translated",
             "value": "Legno"
+          }
+        }
+      }
+    },
+    "X and Y are in mm from the panel's bottom left corner.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "X e Y sono in mm dall'angolo in basso a sinistra del pannello."
           }
         }
       }
