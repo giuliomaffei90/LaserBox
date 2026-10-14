@@ -432,12 +432,12 @@ struct AssemblyView: NSViewRepresentable {
 /// turns the camera.
 final class JointView: SCNView {
     weak var stage: AssemblyStage?
-    private var grip: (joint: Int, at: SCNVector3, mouse: CGPoint)?  // the point taken, in the joint's frame
+    private var grip: (joint: Int, pivot: SCNNode, at: SCNVector3, mouse: CGPoint)?  // the point taken, in its pivot's frame
 
     override func mouseDown(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
-        if let stage, !stage.exploded, let hit = hitTest(p).first, let j = stage.joint(of: hit.node) {
-            grip = (j, stage.joints[j].node.convertPosition(hit.localCoordinates, from: hit.node), p)
+        if let stage, !stage.exploded, let hit = hitTest(p).first, let pivot = hit.node.parent, let j = stage.joint(of: pivot) {
+            grip = (j, pivot, pivot.convertPosition(hit.localCoordinates, from: hit.node), p)
         } else {
             super.mouseDown(with: event)
         }
@@ -446,7 +446,7 @@ final class JointView: SCNView {
     override func mouseDragged(with event: NSEvent) {
         guard let grip, let stage else { return super.mouseDragged(with: event) }
         let p = convert(event.locationInWindow, from: nil)
-        stage.drag(grip.joint, grip: grip.at, by: CGPoint(x: p.x - grip.mouse.x, y: p.y - grip.mouse.y), in: self)
+        stage.drag(grip.joint, grip: grip.at, on: grip.pivot, by: CGPoint(x: p.x - grip.mouse.x, y: p.y - grip.mouse.y), in: self)
         self.grip?.mouse = p
     }
 
@@ -487,7 +487,9 @@ final class AssemblyStage {
     var key = ""
     var optional: [(node: SCNNode, piece: Piece)] = []  // lids and decorations, shown or hidden
     var moving: [(node: SCNNode, home: SCNVector3, away: SCNVector3?, opacity: CGFloat)] = []  // see explode
-    var joints: [(node: SCNNode, joint: Joint, value: Double)] = []  // the hinged and sliding parts' frames
+    /// The hinged, sliding and bending parts: their pieces hang on a pivot per place `s` along the joint's path
+    /// (one, at 0, for a hinge or a slide), placed as the pieces are, moved by the joint's transform there.
+    var joints: [(joint: Joint, value: Double, pivots: [Double: SCNNode])] = []
     var exploded = false
     var zoom: CGFloat = 1   // how much the exploded view needs the camera to zoom out
     var size: CGFloat = 0
@@ -537,19 +539,23 @@ final class AssemblyStage {
         spin.childNodes.forEach { $0.removeFromParentNode() }
         optional = []
         let box = SCNNode()
-        joints = (assembly.joints ?? []).map { joint in
-            let node = SCNNode()
-            box.addChildNode(node)
-            return (node, joint, joint.start ?? 0)
-        }
-        joints.indices.forEach(pose)
+        joints = (assembly.joints ?? []).map { ($0, $0.start ?? 0, [:]) }
         var built: [(SCNNode, Piece)] = []
         for piece in assembly.pieces where all || Self.shown(piece, decorations: decorations, lids: lids) {
             let node = Self.node(for: piece, material: material)
-            (piece.joint.map { joints[$0].node } ?? box).addChildNode(node)
+            if let j = piece.joint {
+                let s = piece.s ?? joints[j].joint.rest ?? 0
+                let pivot = joints[j].pivots[s] ?? SCNNode()
+                if pivot.parent == nil { box.addChildNode(pivot) }
+                joints[j].pivots[s] = pivot
+                pivot.addChildNode(node)
+            } else {
+                box.addChildNode(node)
+            }
             built.append((node, piece))
             if piece.lid == true || piece.decoration != nil { optional.append((node, piece)) }
         }
+        joints.indices.forEach(pose)
         let (minV, maxV) = box.boundingBox
         let dx = maxV.x - minV.x, dy = maxV.y - minV.y, dz = maxV.z - minV.z
         let size = sqrt(dx * dx + dy * dy + dz * dz)
@@ -686,33 +692,29 @@ final class AssemblyStage {
 
     /// Puts a joint's parts where its value says; closed in the exploded view, which moves them from there.
     private func pose(_ i: Int) {
-        let (node, joint, value) = joints[i]
-        let v = Float(exploded ? 0 : value), axis = SIMD3<Float>(joint.axis.map(Float.init))
-        if joint.kind == "hinge", let at = joint.at.map({ SIMD3<Float>($0.map(Float.init)) }) {
-            let turn = simd_quatf(angle: v * .pi / 180, axis: axis)
-            node.simdOrientation = turn
-            node.simdPosition = at - turn.act(at)
-        } else {
-            node.simdPosition = axis * v
+        let (joint, value, pivots) = joints[i]
+        for (s, pivot) in pivots {
+            let m = joint.transform(exploded ? 0 : value, at: s)
+            pivot.simdTransform = simd_float4x4(SIMD4<Float>(m.columns.0), SIMD4<Float>(m.columns.1),
+                                                SIMD4<Float>(m.columns.2), SIMD4<Float>(m.columns.3))
         }
     }
 
-    /// The joint a piece's node moves with.
-    func joint(of node: SCNNode) -> Int? { joints.firstIndex { $0.node === node.parent } }
+    /// The joint whose parts a pivot holds.
+    func joint(of pivot: SCNNode) -> Int? { joints.firstIndex { $0.pivots.values.contains(pivot) } }
 
-    /// Moves joint i so that `grip` (a point of its parts, in its frame) follows the mouse, moved by `delta`
-    /// in the view: by the share of the move along the way the point goes on screen, kept within range.
-    func drag(_ i: Int, grip: SCNVector3, by delta: CGPoint, in view: SCNView) {
-        let (node, joint, value) = joints[i]
-        guard !exploded, let frame = node.parent else { return }
-        let p = node.simdConvertPosition(SIMD3<Float>(grip), to: nil)
-        let axis = frame.simdConvertVector(SIMD3<Float>(joint.axis.map(Float.init)), to: nil)
-        var step = axis   // how far p goes for one unit of value: a mm, or a degree
-        if joint.kind == "hinge", let at = joint.at {
-            step = simd_cross(axis, p - frame.simdConvertPosition(SIMD3<Float>(at.map(Float.init)), to: nil)) * .pi / 180
+    /// Moves joint i so that `grip` (a point of its parts, in `pivot`'s frame) follows the mouse, moved by
+    /// `delta` in the view: by the share of the move along the way the point goes on screen, kept within range.
+    func drag(_ i: Int, grip: SCNVector3, on pivot: SCNNode, by delta: CGPoint, in view: SCNView) {
+        let (joint, value, pivots) = joints[i]
+        guard !exploded, let box = pivot.parent, let s = pivots.first(where: { $0.value === pivot })?.key else { return }
+        let at = { (v: Double) -> SCNVector3 in   // the grabbed point on screen, the joint at v
+            let p = joint.transform(v, at: s) * SIMD4<Double>(SIMD3<Double>(grip), 1)
+            return view.projectPoint(box.convertPosition(SCNVector3(p.x, p.y, p.z), to: nil))
         }
-        let a = view.projectPoint(SCNVector3(p)), b = view.projectPoint(SCNVector3(p + step))
-        let sx = b.x - a.x, sy = b.y - a.y, l2 = sx * sx + sy * sy
+        let step = 0.5   // a degree or a mm: how far the point goes on screen for it
+        let a = at(value), b = at(value + step)
+        let sx = (b.x - a.x) / step, sy = (b.y - a.y) / step, l2 = sx * sx + sy * sy
         guard l2 > 1e-6 else { return }
         joints[i].value = min(max(value + Double((delta.x * sx + delta.y * sy) / l2), joint.range[0]), joint.range[1])
         pose(i)
@@ -839,6 +841,59 @@ final class AssemblyStage {
             m31: n.x, m32: n.y, m33: n.z, m34: 0,
             m41: CGFloat(o[0]) + n.x * half, m42: CGFloat(o[1]) + n.y * half, m43: CGFloat(o[2]) + n.z * half, m44: 1)
         return node
+    }
+}
+
+extension Joint {
+    /// Where a piece hanging at `s` on the joint goes at `value`: the rigid move (in the assembly's frame,
+    /// boxes.py's) from where it is placed, at 0.
+    func transform(_ value: Double, at s: Double) -> simd_double4x4 {
+        let v3 = { (a: [Double]?) in SIMD3<Double>(a ?? [0, 0, 0]) }
+        switch kind {
+        case "hinge":
+            let at = v3(self.at), turn = simd_double4x4(simd_quatd(angle: value * .pi / 180, axis: v3(axis)))
+            return translation(at) * turn * translation(-at)
+        case "slide":
+            return translation(v3(axis) * value)
+        case "flex":   // bend `bend` opens: its angle less by value, over the same arc
+            var angles = (bends ?? []).map { $0[2] }
+            angles[bend ?? 0] -= value
+            let moved = frame(at: s, angles: angles), placed = frame(at: s, angles: nil)
+            guard fixed == "end", let end = bends?[bend ?? 0][1] else { return moved * placed.inverse }
+            return frame(at: end, angles: nil) * frame(at: end, angles: angles).inverse * moved * placed.inverse
+        default:       // "track": along the path
+            return frame(at: s + value, angles: nil) * frame(at: s, angles: nil).inverse
+        }
+    }
+
+    /// Placement.frame_at in assembly.py as a matrix (its tangent, v, their cross product, the position of
+    /// local (u, 0)), the bends turned by `angles` (as placed: nil) over the arcs they are placed with.
+    private func frame(at u: Double, angles: [Double]?) -> simd_double4x4 {
+        let V = SIMD3<Double>(v ?? [0, 1, 0])
+        var pos = SIMD3<Double>(origin ?? [0, 0, 0]), T = SIMD3<Double>(self.u ?? [1, 0, 0]), done = 0.0
+        let matrix = { (p: SIMD3<Double>, T: SIMD3<Double>) in
+            simd_double4x4(SIMD4(T, 0), SIMD4(V, 0), SIMD4(simd_cross(T, V), 0), SIMD4(p, 1))
+        }
+        for (k, b) in (bends ?? []).enumerated() {
+            let (u0, u1, r) = (b[0], b[1], b[3])
+            if u <= u0 { break }
+            pos += T * (u0 - done)
+            let f = min(1, (u - u0) / (u1 - u0))
+            let arc = r * b[2] * .pi / 180, s = arc * f            // the arc's length, how far along it
+            let k = (angles?[k] ?? b[2]) * .pi / 180 / arc         // its curvature now
+            let L = simd_cross(V, T)
+            pos += abs(k * s) < 1e-9 ? T * s : T * (sin(k * s) / k) + L * ((1 - cos(k * s)) / k)
+            T = simd_quatd(angle: k * s, axis: V).act(T)
+            done = u0 + (u1 - u0) * f
+            if u <= u1 { return matrix(pos, T) }
+        }
+        return matrix(pos + T * (u - done), T)
+    }
+
+    private func translation(_ d: SIMD3<Double>) -> simd_double4x4 {
+        var m = matrix_identity_double4x4
+        m.columns.3 = SIMD4(d, 1)
+        return m
     }
 }
 

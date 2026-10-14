@@ -47,16 +47,24 @@ struct Piece: Codable {
     var lid: Bool?
     var clear: Bool?  // always clear acrylic, whatever the material (a display case's glass)
     var joint: Int?   // the joint (in Assembly.joints) it moves with
+    var s: Double?    // where it hangs on the joint's path (flex, track); none: at the joint's rest
 }
 
-/// What moves a hinged or sliding part: "hinge" turns about `axis` through `at` (degrees, right-handed),
-/// "slide" moves along `axis` (mm), within `range` from where the pieces are placed.
+/// What moves a hinged, sliding or bending part, within `range` from where the pieces are placed (0):
+/// "hinge" turns about `axis` through `at` (degrees, right-handed), "slide" moves along `axis` (mm). The
+/// others follow a bent path (`origin`, `u`, `v`, `bends` as assembly.py's Placement): "flex" opens the
+/// path's bend `bend` by value degrees over the same arc, the rest of the path moving with the bend's
+/// start, or its end when `fixed` is "end"; "track" moves the pieces value mm along it.
 struct Joint: Codable {
     let kind: String
-    var at: [Double]?
-    let axis: [Double]
+    var at, axis: [Double]?
     let range: [Double]
     var start: Double?
+    var origin, u, v: [Double]?
+    var bends: [[Double]]?
+    var bend: Int?
+    var fixed: String?
+    var rest: Double?  // where a piece with no `s` hangs
 }
 
 struct Assembly: Codable {
