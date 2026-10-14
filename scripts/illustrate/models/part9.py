@@ -1,4 +1,4 @@
-"""Part 9: OttoLegs … TriangleLamp."""
+"""Part 9: PaperBox … TriangleLamp."""
 import math
 
 import bpy
@@ -132,25 +132,6 @@ def tube(pts, plane, offset, length, t=T, color=WOOD):
 
 
 # ---- models -----------------------------------------------------------------------------
-
-@model
-def OttoLegs():
-    # The two legs of the Otto robot: a small box each, standing at the back of a foot plate that sticks forward.
-    for fx in (0, 56):
-        c = 5
-        poly([(fx + c, 0), (fx + 46 - c, 0), (fx + 46, c), (fx + 46, 55 - c), (fx + 46 - c, 55),
-              (fx + c, 55), (fx, 55 - c), (fx, c)], 0, T)
-        closed_box(fx + 8, 20, T, 30, 30, 36)
-
-
-@model
-def OttoSoles():
-    for y in (0, 48):
-        c = 5
-        sole = poly([(c, y), (58 - c, y), (58, y + c), (58, y + 38 - c), (58 - c, y + 38),
-                      (c, y + 38), (0, y + 38 - c), (0, y + c)], 0, 4, FOAM)
-        hole(sole, 4, y + 4, -1, 50, 30, 6)
-
 
 @model
 def PaperBox():

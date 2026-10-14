@@ -5033,46 +5033,6 @@ def BirdHouse(box, parts):
 
 
 @recipe
-def OttoBody(box, parts):
-    """IntegratedHingeBox's chest hinge box (see there), with the generator's sizes: the sides d
-    deep (drawn x long), the front and back w wide (drawn y long), the body h, the head hl high,
-    the eyes in the head's front at Y = 0. The head is shown closed, and not as a lid: it is the
-    robot's head. The bottom (drawn after the top, with the servo shaft holes x - 12 apart at its
-    u = 6 and x - 6) is turned so the legs' servos are left and right. The servo mounts lie level
-    against the left and right sides, their servo holes over the shaft holes, 7 mm up (the servo's
-    tabs under them, see 3D-REVIEW). The PCB clamps, the clip and the button plate are left out."""
-    t = box.thickness
-    r = box.edges["O"].startWidth()
-    hy2 = box.edges["P"].startWidth()
-    d, w = parts[0].record.args[0], parts[4].record.args[0]
-    h, hl = parts[4].record.args[1], parts[6].record.args[1]
-    top = h + hl
-    left, right = Placement((0, d, 0), (0, -1, 0), Z, 1), Placement((w, 0, 0), Y, Z, 1)
-    places = [
-        left,                                                 # O
-        Placement((0, d, h + hy2), (0, -1, 0), Z, 1),         # head left, p
-        right,                                                # o
-        Placement((w, 0, h + hy2), Y, Z, 1),                  # head right, P
-        Placement((0, 0, 0), X, Z, 1),                        # lower front
-        Placement((w, d, 0), (-1, 0, 0), Z, 1),               # lower back
-        Placement((0, 0, top), X, (0, 0, -1), -1),            # upper front, the eyes
-        Placement((0, d, top), X, (0, 0, -1), 1),             # upper back, q
-        Placement((0, 0, top), Y, X, -1),                     # top
-        Placement((0, 0, 0), X, Y, -1),                       # bottom
-    ]
-    out = list(zip(parts, places))
-    out += [(_hinge_disc(parts[0], (-t, h), r), left), (_hinge_disc(parts[2], (d + t, h), r), right)]
-    servo = OTTOBODY_SERVO_Z
-    out += [(parts[14], Placement((14, 0, servo), Y, (-1, 0, 0), 1)),
-            # its hole for the switch hangs off its end: the disc cut off it is scrap
-            (parts[15], Placement((w, 0, servo), Y, (-1, 0, 0), 1, keep=lambda p: p.area > 100))]
-    return out
-
-
-OTTOBODY_SERVO_Z = 7.0  # the servo mounts' lower face: on the servo's tabs, the servo upside down on the bottom
-
-
-@recipe
 def PhotoFrame(box, parts):
     """The frame upright, as it hangs (its mounting holes at the top of the base), the layers from
     the back: the base (Y 2t … 3t, its photo outline etched on the front), the middle layer (t … 2t:
@@ -5426,60 +5386,7 @@ def CarbonFilter(box, parts):
     return out
 
 
-# ---------------------------------------------------------------- OttoLegs, Hook, PoleHook, RoyalGame, AgricolaInsert
-
-OTTOLEGS_FOOT_GAP = 10  # between the two feet, side by side along Y
-
-
-@recipe
-def OttoLegs(box, parts):
-    """Each leg on its foot, the two side by side along Y. The foot lying; in its two rows of finger
-    holes (across X) an ankle bracket each, u along Y from the foot's edge: the bolt one (anklebolt1)
-    behind (low X), the servo-arm one in front. Both bracket pieces of a part are drawn in one, the
-    second turned half round: each is brought onto the first. Between the brackets the leg box hangs
-    on the ankle axis, level with their holes (15 up, 20 along): the axis goes through the back wall's
-    hole and the middle of the front's notch, 7 above the leg's floor. The leg: ly along X (back at
-    X = 0, front at ly from 7 up), lx along Y between the sides (the one with the cable hole towards
-    the other leg), lh up; the top on the walls, the plain plate under it (its pilot hole under the
-    top's), the bottom ly − 7 long from the back (the front's low 7 left open), the shelf in the sides'
-    holes and the ledge in the front's, both at 25. A servo ring round each arm bracket's hole,
-    outside."""
-    t = box.thickness
-    lx, ly, lh = 12.4, 23.5, max(box.length, 25 + 6 + t)  # as render() has them
-    fx, fy = 60, 40                                        # the foot
-    w = ly + 5.5 + 2 * t                                   # the brackets' finger-hole rows apart
-    big = lambda q: q.area > 100  # the front's notch and its hole leave a scrap
-
-    def halves(part):
-        a, b = sorted(_part_polys(part), key=lambda q: q.bounds[1])
-        ca, cb = a.envelope.centroid, b.envelope.centroid
-        split = (a.bounds[3] + b.bounds[1]) / 2
-        local = local_matrix(part.record)
-        keep = lambda q: q.bounds[1] < split
-        return [(local, keep), (Affine.translation(ca.x + cb.x, ca.y + cb.y) * Affine.rotation(180) * local, keep)]
-
-    arm, bolt = halves(parts[20]), halves(parts[21])
-    out = []
-    for i in range(2):
-        y0 = i * (fy + OTTOLEGS_FOOT_GAP)
-        ox, oy, oz = fx / 2 - ly / 2, y0 + 20 - lx / 2, t + 15 - 7
-        at = lambda x, y, z: (ox + x, oy + y, oz + z)
-        front, back, side, holed = parts[4 * i:4 * i + 4]
-        if i:
-            side, holed = holed, side
-        out += [(front, Placement(at(ly, 0, 7), Y, Z, 1, keep=big)), (back, Placement(at(0, 0, 0), Y, Z, -1)),
-                (side, Placement(at(0, 0, 0), X, Z, 1)), (holed, Placement(at(0, lx, 0), X, Z, -1)),
-                (parts[8 + i], Placement(at(0, 0, lh), X, Y, 1)),
-                (parts[10 + i], Placement(at(0, 0, lh - t), Y, X, -1)),
-                (parts[12 + i], Placement(at(ly - 4.6, 0, 25 - t / 2), X, Y, 1)),
-                (parts[14 + i], Placement(at(ly - 7, 0, 0), Y, (-1, 0, 0), -1)),
-                (parts[16 + i], Placement(at(3, 0, 25 - t / 2), Y, X, -1)),
-                (parts[18 + i], Placement((0, y0, 0), X, Y, 1)),
-                (parts[20], Placement((fx / 2 + w / 2 - t / 2, y0, t), Y, Z, 1, keep=arm[i][1]), arm[i][0]),
-                (parts[21], Placement((fx / 2 - w / 2 - t / 2, y0, t), Y, Z, 1, keep=bolt[i][1]), bolt[i][0]),
-                (parts[22 + i], Placement((fx / 2 + w / 2 + t / 2, y0 + 10, t + 5), Y, Z, 1))]
-    return out
-
+# ---------------------------------------------------------------- Hook, PoleHook, RoyalGame, AgricolaInsert
 
 @recipe
 def Hook(box, parts):
@@ -6886,33 +6793,6 @@ def Sphere(box, parts):
         local = (Affine.rotation(-90) * Affine.translation(-cx, u_bottom - 30 + box.burn)
                  * local_matrix(part.record))
         out.append((part, place, local))
-    return out
-
-
-OTTOSOLES_GAP = 10  # between the soles, side by side along X
-
-
-@recipe
-def OttoSoles(box, parts):
-    """Each sole (an x × y frame with chamfered corners, w wide) lying flat, side by side along
-    X: two of the halves drawn one after the other (an L each, its full chamfer at the corner
-    (0, y), turned 45° on the sheet), the second turned half round, their dovetails meeting at
-    the other two corners."""
-    x, y, c2 = box.x, box.y, box.chamfer * 2 ** 0.5
-    part = parts[0]
-    local, halves = local_matrix(part.record), []
-    for q in _part_polys(part):
-        left = q.bounds[0]                                  # the full chamfer, upright on the sheet
-        ys = [v for u, v in q.exterior.coords if u < left + 0.5]
-        m = (Affine.translation(0, y) * Affine.rotation(-45)
-             * Affine.translation(c2 / 2 - left, -(min(ys) + max(ys)) / 2) * local)
-        halves.append((m, affine_transform(q, (m * ~local).to_shapely()).centroid))
-    out = []
-    for i, (m, c) in enumerate(halves):
-        if i % 2:
-            m, c = Affine.rotation(180, pivot=(x / 2, y / 2)) * m, Point(x - c.x, y - c.y)
-        keep = lambda p, c=c: p.centroid.distance(c) < 1
-        out.append((part, Placement((i // 2 * (x + OTTOSOLES_GAP), 0, 0), X, Y, 1, keep=keep), m))
     return out
 
 

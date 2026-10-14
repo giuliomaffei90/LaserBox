@@ -56,8 +56,9 @@ def _adjust_size(adjust):
 boxes.Boxes.adjustSize = _adjust_size(boxes.Boxes.adjustSize)
 
 # boxes.py's "Unstable" group (generators still being worked on) is left out.
+# Nor the Otto robot's body, legs and soles.
 GENERATORS = {cls.__name__: cls for cls in boxes.generators.getAllBoxGenerators().values()
-              if cls.webinterface and cls.ui_group != "Unstable"}
+              if cls.webinterface and cls.ui_group != "Unstable" and not cls.__name__.startswith("Otto")}
 
 
 class RollHolder(boxes.generators.wallrollholder.WallRollHolder):
@@ -192,7 +193,6 @@ PARAMETER_NAMES = {
     ('num', 'number of holdfasts'): 'holdfasts',
     ('num', 'number of mounting holes (integer)'): 'mounting holes',
     ('num', 'number of shelves'): 'shelves',
-    ('num', 'number of soles'): 'soles',
     ('nx', 'Number of holes in width (X).'): 'holes across',
     ('nx', 'number of gridfinity grids in X direction'): 'grids across',
     ('ny', 'Number of holes in depth (Y).'): 'holes in depth',
@@ -223,7 +223,6 @@ PARAMETER_NAMES = {
     ('z', 'height of the box'): 'height',
     ('z', 'inner depth in mm'): 'depth',
     ("width", "Width of linkages"): "link width",
-    ("width", "width of sole stripe"): "sole strip width",
     ("height", "height of the body"): "body height",
     # by generator: a Z beam's walls (two flanges, the web between) and its length
     ("ZBeam", "x"): "first flange", ("ZBeam", "y"): "web", ("ZBeam", "z"): "second flange", ("ZBeam", "h"): "length",

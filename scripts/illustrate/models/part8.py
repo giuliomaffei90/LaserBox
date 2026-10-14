@@ -1,4 +1,4 @@
-"""Models, part 8: Dispenser … OttoBody."""
+"""Models, part 8: Dispenser … NightLightBox."""
 import math
 import bpy
 from iso import *
@@ -336,14 +336,3 @@ def NightLightBox():
         extrude(pts, "xz", yy, 5)
     box(8, 57, T, 159, 5, 90, (1.0, 0.95, 0.72, 1))          # the diffuser lit from behind
 
-
-@model
-def OttoBody():
-    for xx in (4, 36):
-        floor(xx - 3, -8, 0, 26, 46, T)                      # feet
-        box(xx, 0, T, 20, 26, 30)                            # legs
-    closed_box(0, 0, 33, 60, 60, 35)                         # lower body
-    closed_box(0, 0, 68, 60, 60, 30)                         # upper body (head)
-    for xx in (20, 40):                                      # ultrasonic eyes
-        cylinder(xx, -6, 83, 8, 6, GREY, axis="y", segments=24)
-        cylinder(xx, -7, 83, 6, 1, DARK, axis="y", segments=24)

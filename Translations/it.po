@@ -9915,90 +9915,6 @@ msgid "pipe is closed at the top"
 msgstr "la canna è chiusa in cima"
 
 #. name of box generator
-#: boxes/generators/ottobody.py
-msgid "OttoBody"
-msgstr "Corpo Otto"
-
-#. description of OttoBody
-#: boxes/generators/ottobody.py
-msgid "Otto LC - a laser cut chassis for Otto DIY - body"
-msgstr "Otto LC - telaio tagliato al laser per Otto DIY - corpo"
-
-msgid "OttoBody Settings"
-msgstr "Impostazioni corpo Otto"
-
-#. name of box generator
-#: boxes/generators/ottolegs.py
-msgid "OttoLegs"
-msgstr "Gambe Otto"
-
-#. description of OttoLegs
-#: boxes/generators/ottolegs.py
-msgid "Otto LC - a laser cut chassis for Otto DIY - legs"
-msgstr "Otto LC - telaio tagliato al laser per Otto DIY - gambe"
-
-msgid "OttoLegs Settings"
-msgstr "Impostazioni gambe Otto"
-
-#. parameter name
-#: boxes/generators/ottolegs.py
-msgid "anklebolt1"
-msgstr "bullone caviglia 1"
-
-#. help for parameter anklebolt1
-#: boxes/generators/ottolegs.py
-msgid "diameter for hole for ankle bolts - foot side"
-msgstr "diametro del foro per i bulloni della caviglia, lato piede"
-
-#. parameter name
-#: boxes/generators/ottolegs.py
-msgid "anklebolt2"
-msgstr "bullone caviglia 2"
-
-#. help for parameter anklebolt2
-#: boxes/generators/ottolegs.py
-msgid "diameter for hole for ankle bolts - leg side"
-msgstr "diametro del foro per i bulloni della caviglia, lato gamba"
-
-#. help for parameter length
-#: boxes/generators/ottolegs.py
-msgid "length of legs (34mm min)"
-msgstr "lunghezza delle gambe (minimo 34 mm)"
-
-#. name of box generator
-#: boxes/generators/ottosoles.py
-msgid "OttoSoles"
-msgstr "Suole Otto"
-
-#. description of OttoSoles
-#: boxes/generators/ottosoles.py
-msgid "Foam soles for the OttO bot"
-msgstr "Suole in gommapiuma per il robot Otto"
-
-msgid "OttoSoles Settings"
-msgstr "Impostazioni suole Otto"
-
-#. help for parameter width
-#: boxes/generators/ottosoles.py
-msgid "width of sole stripe"
-msgstr "larghezza della striscia della suola"
-
-#. parameter name
-#: boxes/generators/ottosoles.py
-msgid "chamfer"
-msgstr "smusso"
-
-#. help for parameter chamfer
-#: boxes/generators/ottosoles.py
-msgid "chamfer at the corners"
-msgstr "smusso agli angoli"
-
-#. help for parameter num
-#: boxes/generators/ottosoles.py
-msgid "number of soles"
-msgstr "numero di suole"
-
-#. name of box generator
 #: boxes/generators/paintbox.py
 msgid "PaintStorage"
 msgstr "Portacolori"
@@ -15843,12 +15759,6 @@ msgstr "ripiani"
 #. short name of a parameter (x, h, sx…), shown as its label
 #: LaserBox/bridge.py
 msgctxt "parameter"
-msgid "soles"
-msgstr "suole"
-
-#. short name of a parameter (x, h, sx…), shown as its label
-#: LaserBox/bridge.py
-msgctxt "parameter"
 msgid "holes across"
 msgstr "fori in larghezza"
 
@@ -15964,12 +15874,6 @@ msgstr "distanza tra i pezzi in mm"
 msgctxt "parameter"
 msgid "link width"
 msgstr "larghezza delle aste"
-
-#. short name of a parameter (x, h, sx…), shown as its label
-#: LaserBox/bridge.py
-msgctxt "parameter"
-msgid "sole strip width"
-msgstr "larghezza striscia della suola"
 
 #. short name of a parameter (x, h, sx…), shown as its label
 #: LaserBox/bridge.py
