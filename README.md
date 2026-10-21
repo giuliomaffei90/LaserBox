@@ -46,7 +46,7 @@ A network connection is needed once, to fetch boxes.py and its dependencies.
 ## Installation
 
 ```bash
-git clone https://gitlab.com/giuliomaffei90/LaserBox.git
+git clone https://github.com/giuliomaffei90/LaserBox.git
 cd LaserBox
 scripts/bundle-runtime.sh
 xcodegen generate
